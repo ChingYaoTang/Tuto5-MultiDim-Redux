@@ -1,5 +1,4 @@
 import * as d3 from 'd3'
-// import { getDefaultFontSize } from '../../utils/helper';
 import { getStateLabelFromFips } from '../../utils/usStateFips';
 import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
@@ -17,10 +16,7 @@ class ScatterplotD3 {
     brushRafId = null;
     isProgrammaticBrushClear = false;
     pendingBrushSelection = null;
-    lastBrushedIndexes = [];
-    lastBrushDispatchMs = 0;
-    brushDispatchIntervalMs = 220;
-    syncDuringBrush = false;
+    lastBrushPreviewIndexes = null;
     chartTitleText;
     chartSubtitleText;
     xAxisLabelText;
@@ -51,6 +47,7 @@ class ScatterplotD3 {
     transitionEase=d3.easeCubicOut;
     circleRadius = 3;
     hoveredCircleRadius = 4.8;
+    hoveredStateCircleRadius = 4.2;
     // Three-level highlight profile (restored):
     // selected > related > filtered
     selectedCircleRadius = 6.2;
@@ -59,10 +56,12 @@ class ScatterplotD3 {
     markerStrokeWidth = 0.9;
     hoveredStrokeColor = "#f59e0b";
     hoveredStrokeWidth = 2.2;
+    hoveredStateStrokeWidth = 1.8;
     selectedStrokeColor = "#0f172a";
     selectedStrokeWidth = 3.2;
     relatedStrokeColor = "#64748b";
     relatedStrokeWidth = 1.4;
+    hoveredStateOpacity = 0.92;
     relatedOpacity = 0.6;
     filteredOpacity = 0.1;
     xScale;
@@ -70,14 +69,23 @@ class ScatterplotD3 {
     controllerMethods;
     itemPixelCache = [];
     itemByIndex;
+    indexesByState;
     markerGroupByIndex;
     markerLevelByIndex;
     selectedIndexSet = new Set();
     selectedStateSet = new Set();
+    brushPreviewSelectedIndexSet = new Set();
+    isBrushPreviewActive = false;
+    isBrushing = false;
     lastHoveredIndex = null;
+    lastHoveredStateIndexSet = new Set();
     lastVisDataRef = null;
+    lastXAttribute = null;
+    lastYAttribute = null;
     currentColorAttribute = null;
     attributeDirectionByField = null;
+    lastAxisTransitionTs = 0;
+    axisTransitionCooldownMs = 140;
 
 
     constructor(el){
@@ -86,6 +94,7 @@ class ScatterplotD3 {
         this.colorGradientId = `scatterplotColorGradient-${scatterplotIdCounter}`;
         this.colorScale = d3.scaleSequential(this.colorInterpolator).clamp(true);
         this.itemByIndex = new Map();
+        this.indexesByState = new Map();
         this.markerGroupByIndex = new Map();
         this.markerLevelByIndex = new Map();
     };
@@ -199,25 +208,22 @@ class ScatterplotD3 {
         this.brushG = this.svg.append("g")
             .attr("class","brushG")
         ;
-    }
-
-    changeBorderAndOpacity(selection, selected){
-        selection
-            .style("opacity", selected?1:this.defaultOpacity)
-        ;
-
-        selection.select(".markerCircle")
-            .attr("r", selected ? this.circleRadius + 0.4 : this.circleRadius)
-            .attr("stroke", selected ? "#0f766e" : this.markerStrokeColor)
-            .attr("stroke-width",selected ? 1.4 : this.markerStrokeWidth)
-        ;
+        this.bindBrushInteraction();
     }
 
     rebuildItemPixelCache = function(visData, xAttribute, yAttribute){
         this.itemPixelCache = [];
         this.itemByIndex.clear();
+        this.indexesByState.clear();
         visData.forEach((item)=>{
             this.itemByIndex.set(item.index, item);
+            if(item.state !== undefined && item.state !== null){
+                const stateKey = String(item.state);
+                if(!this.indexesByState.has(stateKey)){
+                    this.indexesByState.set(stateKey, []);
+                }
+                this.indexesByState.get(stateKey).push(item.index);
+            }
             const xValue = this.getRawNumericValue(item, xAttribute);
             const yValue = this.getRawNumericValue(item, yAttribute);
             if(!Number.isFinite(xValue) || !Number.isFinite(yValue)){
@@ -271,26 +277,48 @@ class ScatterplotD3 {
         return direction === 'lower';
     }
 
-    updateMarkers(selection,xAttribute,yAttribute,colorAttribute, updateColor=true){
-        // transform selection
-        selection
-            .transition().duration(this.transitionDuration).ease(this.transitionEase)
-            .attr("transform", (item)=>{
-                // use scales to return shape position from data values
-                const xValue = this.getRawNumericValue(item, xAttribute);
-                const yValue = this.getRawNumericValue(item, yAttribute);
+    getMarkerTransform = function(itemData, xAttribute, yAttribute){
+        const xValue = this.getRawNumericValue(itemData, xAttribute);
+        const yValue = this.getRawNumericValue(itemData, yAttribute);
 
-                // put non-numeric values outside the chart area
-                if(!Number.isFinite(xValue) || !Number.isFinite(yValue)){
-                    return `translate(${-9999},${-9999})`;
-                }
-                const xPos = this.xScale(xValue);
-                const yPos = this.yScale(yValue);
-                return `translate(${xPos},${yPos})`;
-            })
-        ;
+        // put non-numeric values outside the chart area
+        if(!Number.isFinite(xValue) || !Number.isFinite(yValue)){
+            return `translate(${-9999},${-9999})`;
+        }
+        const xPos = this.xScale(xValue);
+        const yPos = this.yScale(yValue);
+        return `translate(${xPos},${yPos})`;
+    }
+
+    updateMarkers(
+        selection,
+        xAttribute,
+        yAttribute,
+        colorAttribute,
+        {
+            updateColor = true,
+            updatePosition = true,
+            animatePosition = true
+        } = {}
+    ){
+        if(updatePosition){
+            selection.interrupt("marker-position");
+            if(animatePosition){
+                selection
+                    .transition("marker-position")
+                    .duration(this.transitionDuration)
+                    .ease(this.transitionEase)
+                    .attr("transform", (itemData)=>this.getMarkerTransform(itemData, xAttribute, yAttribute))
+                ;
+            }else{
+                selection
+                    .attr("transform", (itemData)=>this.getMarkerTransform(itemData, xAttribute, yAttribute))
+                ;
+            }
+        }
         if(updateColor){
             selection.select(".markerCircle")
+                .interrupt("marker-color")
                 .attr("fill", (itemData)=>{
                     const colorValue = Number(itemData[colorAttribute]);
                     if(!Number.isFinite(colorValue)){
@@ -303,7 +331,7 @@ class ScatterplotD3 {
         }
     }
 
-    applyMarkerLevelStyle(index, level){
+    applyMarkerLevelStyle(index, level, allowRaise = true){
         const markerNode = this.markerGroupByIndex.get(index);
         if(!markerNode){
             return;
@@ -312,10 +340,10 @@ class ScatterplotD3 {
         const markerCircleSelection = markerSelection.select(".markerCircle");
         markerCircleSelection.interrupt();
         if(level === "selected"){
-            markerSelection
-                .raise()
-                .style("opacity", 1)
-            ;
+            if(allowRaise){
+                markerSelection.raise();
+            }
+            markerSelection.style("opacity", 1);
             markerCircleSelection
                 .attr("r", this.selectedCircleRadius)
                 .attr("stroke", this.selectedStrokeColor)
@@ -350,6 +378,42 @@ class ScatterplotD3 {
         ;
     }
 
+    applyMarkerBaseCircleStyle(index){
+        const markerNode = this.markerGroupByIndex.get(index);
+        if(!markerNode){
+            return;
+        }
+        const markerCircleNode = markerNode.querySelector(".markerCircle");
+        if(!markerCircleNode){
+            return;
+        }
+        markerCircleNode.setAttribute("r", this.circleRadius);
+        markerCircleNode.setAttribute("stroke", this.markerStrokeColor);
+        markerCircleNode.setAttribute("stroke-width", this.markerStrokeWidth);
+    }
+
+    applyMarkerBrushPreviewStyle(index, level){
+        const markerNode = this.markerGroupByIndex.get(index);
+        if(!markerNode){
+            return;
+        }
+        const markerCircleNode = markerNode.querySelector(".markerCircle");
+        if(level === "selected"){
+            markerNode.style.opacity = "1";
+            if(markerCircleNode){
+                markerCircleNode.setAttribute("r", this.selectedCircleRadius);
+                markerCircleNode.setAttribute("stroke", this.selectedStrokeColor);
+                markerCircleNode.setAttribute("stroke-width", this.selectedStrokeWidth);
+            }
+            return;
+        }
+        if(level === "filtered"){
+            markerNode.style.opacity = String(this.filteredOpacity);
+            return;
+        }
+        markerNode.style.opacity = String(this.defaultOpacity);
+    }
+
     getMarkerLevelForSelection(index, selectedIndexSet, selectedStateSet, hasSelection){
         if(!hasSelection){
             return "default";
@@ -364,7 +428,7 @@ class ScatterplotD3 {
         return "filtered";
     }
 
-    highlightSelectedIndexes(selectedIndexes){
+    buildSelectionContext(selectedIndexes){
         const selectedIndexSet = new Set(
             (selectedIndexes || [])
                 .filter((index)=>index!==undefined && index!==null)
@@ -376,20 +440,106 @@ class ScatterplotD3 {
                 selectedStateSet.add(String(itemData.state));
             }
         }
-        const hasSelection = selectedIndexSet.size > 0;
+        return {
+            selectedIndexSet,
+            selectedStateSet,
+            hasSelection: selectedIndexSet.size > 0
+        };
+    }
 
+    applySelectionContextFull(selectionContext, allowRaise = true){
+        const { selectedIndexSet, selectedStateSet, hasSelection } = selectionContext;
         for(const [index] of this.markerGroupByIndex.entries()){
             const nextLevel = this.getMarkerLevelForSelection(index, selectedIndexSet, selectedStateSet, hasSelection);
             const previousLevel = this.markerLevelByIndex.get(index);
             if(previousLevel === nextLevel){
                 continue;
             }
-            this.applyMarkerLevelStyle(index, nextLevel);
+            this.applyMarkerLevelStyle(index, nextLevel, allowRaise);
             this.markerLevelByIndex.set(index, nextLevel);
         }
 
         this.selectedIndexSet = selectedIndexSet;
         this.selectedStateSet = selectedStateSet;
+    }
+
+    resetBrushPreviewState = function(){
+        this.brushPreviewSelectedIndexSet = new Set();
+        this.isBrushPreviewActive = false;
+    }
+
+    applyBrushPreviewSelection(selectedIndexes){
+        const nextSelectedSet = new Set(
+            (selectedIndexes || [])
+                .filter((index)=>index!==undefined && index!==null)
+        );
+        const hasNextSelection = nextSelectedSet.size > 0;
+        const hadPreview = this.isBrushPreviewActive;
+        const hadSelection = this.brushPreviewSelectedIndexSet.size > 0;
+
+        // Brush preview uses only selected/filtered/default levels for speed.
+        // Full selected/related styling is restored on brush end.
+        if(!hadPreview || hadSelection !== hasNextSelection){
+            for(const [index] of this.markerGroupByIndex.entries()){
+                const nextLevel = hasNextSelection
+                    ? (nextSelectedSet.has(index) ? "selected" : "filtered")
+                    : "default"
+                ;
+                const previousLevel = this.markerLevelByIndex.get(index);
+                if(previousLevel !== "default"){
+                    this.applyMarkerBaseCircleStyle(index);
+                }
+                this.applyMarkerBrushPreviewStyle(index, nextLevel);
+                this.markerLevelByIndex.set(index, nextLevel);
+            }
+            this.brushPreviewSelectedIndexSet = nextSelectedSet;
+            this.isBrushPreviewActive = true;
+            return;
+        }
+
+        if(!hasNextSelection){
+            this.brushPreviewSelectedIndexSet = nextSelectedSet;
+            this.isBrushPreviewActive = true;
+            return;
+        }
+
+        for(const index of this.brushPreviewSelectedIndexSet){
+            if(nextSelectedSet.has(index)){
+                continue;
+            }
+            const previousLevel = this.markerLevelByIndex.get(index);
+            const nextLevel = "filtered";
+            if(previousLevel === nextLevel){
+                continue;
+            }
+            this.applyMarkerBaseCircleStyle(index);
+            this.applyMarkerBrushPreviewStyle(index, nextLevel);
+            this.markerLevelByIndex.set(index, nextLevel);
+        }
+        for(const index of nextSelectedSet){
+            if(this.brushPreviewSelectedIndexSet.has(index)){
+                continue;
+            }
+            const previousLevel = this.markerLevelByIndex.get(index);
+            const nextLevel = "selected";
+            if(previousLevel === nextLevel){
+                continue;
+            }
+            this.applyMarkerBrushPreviewStyle(index, nextLevel);
+            this.markerLevelByIndex.set(index, nextLevel);
+        }
+        this.brushPreviewSelectedIndexSet = nextSelectedSet;
+        this.isBrushPreviewActive = true;
+    }
+
+    highlightSelectedIndexes(selectedIndexes){
+        this.resetBrushPreviewState();
+        const selectionContext = this.buildSelectionContext(selectedIndexes);
+        this.applySelectionContextFull(selectionContext, true);
+    }
+
+    highlightSelectedIndexesDuringBrush(selectedIndexes){
+        this.applyBrushPreviewSelection(selectedIndexes);
     }
 
     highlightSelectedItems(selectedItems){
@@ -445,10 +595,49 @@ class ScatterplotD3 {
         this.lastHoveredIndex = hoveredIndex;
     }
 
+    clearHoveredStateHighlights(){
+        if(!this.lastHoveredStateIndexSet || this.lastHoveredStateIndexSet.size === 0){
+            return;
+        }
+        this.lastHoveredStateIndexSet.forEach((index)=>{
+            this.resetMarkerToBaseStyle(index);
+        });
+        this.lastHoveredStateIndexSet = new Set();
+    }
+
     highlightHoveredState(hoveredState){
-        // State hover highlight is intentionally disabled in scatterplot:
-        // only the directly hovered point should be emphasized.
-        void hoveredState;
+        this.clearHoveredStateHighlights();
+        if(hoveredState === null || hoveredState === undefined || hoveredState === ""){
+            return;
+        }
+        const hoveredStateKey = String(hoveredState);
+        if(this.selectedStateSet.has(hoveredStateKey)){
+            return;
+        }
+        const hoveredIndexes = this.indexesByState.get(hoveredStateKey) || [];
+        const nextHoveredStateIndexSet = new Set();
+        hoveredIndexes.forEach((index)=>{
+            const markerNode = this.markerGroupByIndex.get(index);
+            if(!markerNode){
+                return;
+            }
+            const markerSelection = d3.select(markerNode);
+            markerSelection
+                .raise()
+                .style("opacity", this.hoveredStateOpacity)
+            ;
+            if(this.selectedIndexSet.has(index)){
+                return;
+            }
+            markerSelection.select(".markerCircle")
+                .interrupt()
+                .attr("stroke", this.hoveredStrokeColor)
+                .attr("stroke-width", this.hoveredStateStrokeWidth)
+                .attr("r", this.hoveredStateCircleRadius)
+            ;
+            nextHoveredStateIndexSet.add(index);
+        });
+        this.lastHoveredStateIndexSet = nextHoveredStateIndexSet;
     }
 
     updateChartTexts(meta){
@@ -533,7 +722,7 @@ class ScatterplotD3 {
         ;
     }
 
-    updateAxis = function(visData,xAttribute,yAttribute){
+    updateAxis = function(visData,xAttribute,yAttribute, animateTransition = true){
         const xAxisReversed = this.isLowerBetterAttribute(xAttribute);
         const yAxisReversed = this.isLowerBetterAttribute(yAttribute);
         this.xScale.range(xAxisReversed ? [this.width, 0] : [0, this.width]);
@@ -571,35 +760,61 @@ class ScatterplotD3 {
         const xTickCount = 6;
         const yTickCount = 6;
 
-        this.xGridG
-            .transition().duration(this.transitionDuration).ease(this.transitionEase)
-            .call(
-                d3.axisBottom(this.xScale)
-                    .ticks(xTickCount)
-                    .tickSize(-this.height)
-                    .tickFormat("")
-            )
-        ;
-        this.yGridG
-            .transition().duration(this.transitionDuration).ease(this.transitionEase)
-            .call(
-                d3.axisLeft(this.yScale)
-                    .ticks(yTickCount)
-                    .tickSize(-this.width)
-                    .tickFormat("")
-            )
-        ;
+        this.xGridG.interrupt("axis-update");
+        this.yGridG.interrupt("axis-update");
+        const xAxisG = this.svg.select(".xAxisG");
+        const yAxisG = this.svg.select(".yAxisG");
+        xAxisG.interrupt("axis-update");
+        yAxisG.interrupt("axis-update");
 
-        // create axis with computed scales
-        // .xAxisG and .yAxisG are initialized in create() function
-        this.svg.select(".xAxisG")
-            .transition().duration(this.transitionDuration).ease(this.transitionEase)
-            .call(d3.axisBottom(this.xScale).ticks(xTickCount).tickFormat(d3.format(".2f")))
+        const xGridAxis = d3.axisBottom(this.xScale)
+            .ticks(xTickCount)
+            .tickSize(-this.height)
+            .tickFormat("")
         ;
-        this.svg.select(".yAxisG")
-            .transition().duration(this.transitionDuration).ease(this.transitionEase)
-            .call(d3.axisLeft(this.yScale).ticks(yTickCount).tickFormat(d3.format(".2f")))
+        const yGridAxis = d3.axisLeft(this.yScale)
+            .ticks(yTickCount)
+            .tickSize(-this.width)
+            .tickFormat("")
         ;
+        const xAxis = d3.axisBottom(this.xScale).ticks(xTickCount).tickFormat(d3.format(".2f"));
+        const yAxis = d3.axisLeft(this.yScale).ticks(yTickCount).tickFormat(d3.format(".2f"));
+
+        if(animateTransition){
+            this.xGridG
+                .transition("axis-update")
+                .duration(this.transitionDuration)
+                .ease(this.transitionEase)
+                .call(xGridAxis)
+            ;
+            this.yGridG
+                .transition("axis-update")
+                .duration(this.transitionDuration)
+                .ease(this.transitionEase)
+                .call(yGridAxis)
+            ;
+
+            // create axis with computed scales
+            // .xAxisG and .yAxisG are initialized in create() function
+            xAxisG
+                .transition("axis-update")
+                .duration(this.transitionDuration)
+                .ease(this.transitionEase)
+                .call(xAxis)
+            ;
+            yAxisG
+                .transition("axis-update")
+                .duration(this.transitionDuration)
+                .ease(this.transitionEase)
+                .call(yAxis)
+            ;
+            return;
+        }
+
+        this.xGridG.call(xGridAxis);
+        this.yGridG.call(yGridAxis);
+        xAxisG.call(xAxis);
+        yAxisG.call(yAxis);
     }
 
     getSelectedIndexesInsideBrushSelection = function(brushSelection){
@@ -635,28 +850,10 @@ class ScatterplotD3 {
         return true;
     }
 
-    dispatchBrushSelection = function(controllerMethods, selectedIndexes, brushSelection, forceDispatch, eventType){
+    dispatchBrushSelection = function(controllerMethods, selectedIndexes, brushSelection){
         if(!controllerMethods || !controllerMethods.handleOnBrushSelection){
             return;
         }
-
-        if(!forceDispatch && eventType === "brush" && !this.syncDuringBrush){
-            return;
-        }
-
-        if(!forceDispatch && this.areIndexArraysEqual(this.lastBrushedIndexes, selectedIndexes)){
-            return;
-        }
-
-        if(!forceDispatch && eventType === "brush"){
-            const now = window.performance ? window.performance.now() : Date.now();
-            if(now - this.lastBrushDispatchMs < this.brushDispatchIntervalMs){
-                return;
-            }
-            this.lastBrushDispatchMs = now;
-        }
-
-        this.lastBrushedIndexes = selectedIndexes;
         const selectedItems = selectedIndexes
             .map((index)=>this.itemByIndex.get(index))
             .filter((item)=>item!==undefined)
@@ -664,19 +861,45 @@ class ScatterplotD3 {
         controllerMethods.handleOnBrushSelection(
             selectedItems,
             brushSelection,
-            eventType
+            "end"
         );
     }
 
-    bindBrushInteraction = function(visData, xAttribute, yAttribute, controllerMethods){
-        if(!this.brushG){
+    setMarkerPointerEventsEnabled = function(enabled){
+        if(!this.svg){
+            return;
+        }
+        this.svg.selectAll(".markerG")
+            .style("pointer-events", enabled ? null : "none")
+        ;
+    }
+
+    bindBrushInteraction = function(){
+        if(!this.brushG || this.brushBehavior){
             return;
         }
 
         const handleBrush = (event)=>{
+            if(event.type === "start"){
+                this.isBrushing = true;
+                this.lastBrushPreviewIndexes = null;
+                this.setMarkerPointerEventsEnabled(false);
+                if(this.lastHoveredIndex !== null){
+                    this.resetMarkerToBaseStyle(this.lastHoveredIndex);
+                    this.lastHoveredIndex = null;
+                }
+                if(this.controllerMethods && this.controllerMethods.handleOnMouseLeave){
+                    this.controllerMethods.handleOnMouseLeave();
+                }
+            }
+
             if(this.isProgrammaticBrushClear){
                 if(event.type === "end"){
                     this.isProgrammaticBrushClear = false;
+                    this.isBrushing = false;
+                    this.lastBrushPreviewIndexes = null;
+                    this.resetBrushPreviewState();
+                    this.setMarkerPointerEventsEnabled(true);
                 }
                 return;
             }
@@ -689,9 +912,11 @@ class ScatterplotD3 {
                 }
                 const endSelection = event.selection;
                 const endIndexes = this.getSelectedIndexesInsideBrushSelection(endSelection);
+                this.lastBrushPreviewIndexes = endIndexes;
                 this.highlightSelectedIndexes(endIndexes);
-                this.lastBrushDispatchMs = 0;
-                this.dispatchBrushSelection(controllerMethods, endIndexes, endSelection, true, event.type);
+                this.isBrushing = false;
+                this.setMarkerPointerEventsEnabled(true);
+                this.dispatchBrushSelection(this.controllerMethods, endIndexes, endSelection);
                 return;
             }
 
@@ -706,14 +931,21 @@ class ScatterplotD3 {
                 const selectionToProcess = this.pendingBrushSelection;
                 this.pendingBrushSelection = null;
                 const selectedIndexes = this.getSelectedIndexesInsideBrushSelection(selectionToProcess);
+                if(
+                    this.lastBrushPreviewIndexes
+                    && this.areIndexArraysEqual(this.lastBrushPreviewIndexes, selectedIndexes)
+                ){
+                    return;
+                }
+                this.lastBrushPreviewIndexes = selectedIndexes;
                 // keep brush drag smooth by updating local markers every frame.
-                this.highlightSelectedIndexes(selectedIndexes);
-                this.dispatchBrushSelection(controllerMethods, selectedIndexes, selectionToProcess, false, "brush");
+                this.highlightSelectedIndexesDuringBrush(selectedIndexes);
             });
         };
 
         this.brushBehavior = d3.brush()
             .extent([[0, 0], [this.width, this.height]])
+            .on("start", handleBrush)
             .on("brush", handleBrush)
             .on("end", handleBrush)
         ;
@@ -736,8 +968,10 @@ class ScatterplotD3 {
         }
         this.pendingBrushSelection = null;
         this.isProgrammaticBrushClear = true;
-        this.lastBrushedIndexes = [];
-        this.lastBrushDispatchMs = 0;
+        this.isBrushing = false;
+        this.lastBrushPreviewIndexes = null;
+        this.resetBrushPreviewState();
+        this.setMarkerPointerEventsEnabled(true);
         this.brushG.call(this.brushBehavior.move, null);
     }
 
@@ -753,8 +987,18 @@ class ScatterplotD3 {
         this.controllerMethods = controllerMethods;
         this.attributeDirectionByField = attributeDirectionByField || null;
         const dataChanged = this.lastVisDataRef !== visData;
+        const axisAttributeChanged = this.lastXAttribute !== xAttribute || this.lastYAttribute !== yAttribute;
         const colorChanged = this.currentColorAttribute !== colorAttribute;
         const needsColorUpdate = dataChanged || colorChanged;
+        const needsAxisUpdate = dataChanged || axisAttributeChanged;
+        const needsMarkerPositionUpdate = dataChanged || axisAttributeChanged;
+        let shouldAnimateAxisAndMarker = axisAttributeChanged && !dataChanged;
+        const needsTooltipUpdate = dataChanged || axisAttributeChanged;
+        if(shouldAnimateAxisAndMarker){
+            const now = window.performance ? window.performance.now() : Date.now();
+            shouldAnimateAxisAndMarker = (now - this.lastAxisTransitionTs) >= this.axisTransitionCooldownMs;
+            this.lastAxisTransitionTs = now;
+        }
 
         // build the size scales and x,y axis
         this.updateChartTexts(meta);
@@ -762,8 +1006,10 @@ class ScatterplotD3 {
             this.updateColorScaleAndLegend(visData, colorAttribute);
             this.currentColorAttribute = colorAttribute;
         }
-        this.updateAxis(visData,xAttribute,yAttribute);
-        this.rebuildItemPixelCache(visData, xAttribute, yAttribute);
+        if(needsAxisUpdate){
+            this.updateAxis(visData,xAttribute,yAttribute, shouldAnimateAxisAndMarker);
+            this.rebuildItemPixelCache(visData, xAttribute, yAttribute);
+        }
 
         this.svg.selectAll(".markerG")
             // all elements with the class .cellG (empty the first time)
@@ -775,17 +1021,27 @@ class ScatterplotD3 {
                     const itemG=enter.append("g")
                         .attr("class","markerG")
                         .style("opacity",this.defaultOpacity)
+                        .style("pointer-events", this.isBrushing ? "none" : null)
                         .on("click", (event,itemData)=>{
+                            if(this.isBrushing){
+                                return;
+                            }
                             if(this.controllerMethods && this.controllerMethods.handleOnClick){
                                 this.controllerMethods.handleOnClick(itemData);
                             }
                         })
                         .on("mouseenter", (event,itemData)=>{
+                            if(this.isBrushing){
+                                return;
+                            }
                             if(this.controllerMethods && this.controllerMethods.handleOnMouseEnter){
                                 this.controllerMethods.handleOnMouseEnter(itemData);
                             }
                         })
                         .on("mouseleave", ()=>{
+                            if(this.isBrushing){
+                                return;
+                            }
                             if(this.controllerMethods && this.controllerMethods.handleOnMouseLeave){
                                 this.controllerMethods.handleOnMouseLeave();
                             }
@@ -805,16 +1061,26 @@ class ScatterplotD3 {
                     itemG.select("title")
                         .text((itemData)=>this.getItemTooltipText(itemData, xAttribute, yAttribute))
                     ;
-                    this.updateMarkers(itemG,xAttribute,yAttribute,colorAttribute, true);
+                    this.updateMarkers(itemG,xAttribute,yAttribute,colorAttribute, {
+                        updateColor: true,
+                        updatePosition: true,
+                        animatePosition: false
+                    });
                 },
                 update=>{
                     update.each((itemData, itemIndex, nodes)=>{
                         this.markerGroupByIndex.set(itemData.index, nodes[itemIndex]);
                     });
-                    update.select("title")
-                        .text((itemData)=>this.getItemTooltipText(itemData, xAttribute, yAttribute))
-                    ;
-                    this.updateMarkers(update,xAttribute,yAttribute,colorAttribute, needsColorUpdate)
+                    if(needsTooltipUpdate){
+                        update.select("title")
+                            .text((itemData)=>this.getItemTooltipText(itemData, xAttribute, yAttribute))
+                        ;
+                    }
+                    this.updateMarkers(update,xAttribute,yAttribute,colorAttribute, {
+                        updateColor: needsColorUpdate,
+                        updatePosition: needsMarkerPositionUpdate,
+                        animatePosition: shouldAnimateAxisAndMarker
+                    })
                 },
                 exit =>{
                     exit.each((itemData)=>{
@@ -853,8 +1119,10 @@ class ScatterplotD3 {
             })
         ;
 
-        this.bindBrushInteraction(visData, xAttribute, yAttribute, controllerMethods);
+        this.bindBrushInteraction();
         this.lastVisDataRef = visData;
+        this.lastXAttribute = xAttribute;
+        this.lastYAttribute = yAttribute;
     }
 
     clear = function(){
@@ -864,18 +1132,24 @@ class ScatterplotD3 {
         }
         this.pendingBrushSelection = null;
         this.isProgrammaticBrushClear = false;
-        this.lastBrushedIndexes = [];
-        this.lastBrushDispatchMs = 0;
+        this.isBrushing = false;
+        this.lastBrushPreviewIndexes = null;
         this.itemPixelCache = [];
         this.itemByIndex.clear();
+        this.indexesByState.clear();
         this.markerGroupByIndex.clear();
         this.markerLevelByIndex.clear();
+        this.resetBrushPreviewState();
         this.selectedIndexSet.clear();
         this.selectedStateSet.clear();
         this.lastHoveredIndex = null;
+        this.lastHoveredStateIndexSet.clear();
         this.lastVisDataRef = null;
+        this.lastXAttribute = null;
+        this.lastYAttribute = null;
         this.currentColorAttribute = null;
         this.attributeDirectionByField = null;
+        this.lastAxisTransitionTs = 0;
         d3.select(this.el).selectAll("*").remove();
     }
 }

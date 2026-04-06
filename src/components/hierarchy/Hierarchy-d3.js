@@ -12,6 +12,7 @@ class HierarchyD3 {
     communityLayer;
     stateLayer;
     labelLayer;
+    emphasisLayer;
     linkLayer;
     backgroundRect;
     colorScale;
@@ -33,6 +34,13 @@ class HierarchyD3 {
     selectedStrokeWidth = 4.6;
     hoverStrokeWidth = 3.8;
     relatedStrokeWidth = 1.9;
+    selectedCommunityStrokeColor = '#020617';
+    selectedCommunityStrokeWidth = 5.2;
+    hoverCommunityStrokeColor = '#111827';
+    hoverCommunityStrokeWidth = 3.6;
+    selectedCommunityShadow = 'drop-shadow(0 0 1px rgba(2, 6, 23, 0.95))';
+    lastHoveredCommunityIndex = null;
+    lastHoveredStateValue = null;
 
     constructor(el){
         this.el = el;
@@ -78,6 +86,10 @@ class HierarchyD3 {
         this.communityLayer = this.svg.append('g').attr('class', 'communityLayer');
         this.stateLayer = this.svg.append('g').attr('class', 'stateLayer');
         this.labelLayer = this.svg.append('g').attr('class', 'stateLabelLayer');
+        this.emphasisLayer = this.svg.append('g')
+            .attr('class', 'emphasisLayer')
+            .style('pointer-events', 'none')
+        ;
     }
 
     getLegendTextByLayout(layoutType){
@@ -350,11 +362,32 @@ class HierarchyD3 {
                 }
             })
             .on('mouseenter', (event, node)=>{
+                this.lastHoveredCommunityIndex = node && node.data && node.data.itemData
+                    ? node.data.itemData.index
+                    : null
+                ;
+                this.lastHoveredStateValue = null;
                 if(controllerMethods && controllerMethods.handleOnMouseEnterCommunity){
                     controllerMethods.handleOnMouseEnterCommunity(node.data.itemData);
                 }
             })
             .on('mouseleave', ()=>{
+                this.lastHoveredCommunityIndex = null;
+                if(controllerMethods && controllerMethods.handleOnMouseLeaveCommunity){
+                    controllerMethods.handleOnMouseLeaveCommunity();
+                }
+            })
+            .on('mouseout', (event)=>{
+                const currentNode = event ? event.currentTarget : null;
+                const nextTarget = event ? event.relatedTarget : null;
+                const nextCommunityNode = nextTarget && typeof nextTarget.closest === 'function'
+                    ? nextTarget.closest('.communityNode')
+                    : null
+                ;
+                if(currentNode && nextCommunityNode === currentNode){
+                    return;
+                }
+                this.lastHoveredCommunityIndex = null;
                 if(controllerMethods && controllerMethods.handleOnMouseLeaveCommunity){
                     controllerMethods.handleOnMouseLeaveCommunity();
                 }
@@ -373,11 +406,31 @@ class HierarchyD3 {
                 }
             })
             .on('mouseenter', (event, node)=>{
+                this.lastHoveredStateValue = node && node.data ? node.data.stateValue : null;
+                this.lastHoveredCommunityIndex = null;
                 if(controllerMethods && controllerMethods.handleOnMouseEnterState){
                     controllerMethods.handleOnMouseEnterState(node.data);
                 }
             })
             .on('mouseleave', ()=>{
+                this.lastHoveredStateValue = null;
+                this.resetStateHoverVisuals();
+                if(controllerMethods && controllerMethods.handleOnMouseLeaveState){
+                    controllerMethods.handleOnMouseLeaveState();
+                }
+            })
+            .on('mouseout', (event)=>{
+                const currentNode = event ? event.currentTarget : null;
+                const nextTarget = event ? event.relatedTarget : null;
+                const nextStateNode = nextTarget && typeof nextTarget.closest === 'function'
+                    ? nextTarget.closest('.stateNode, .stateLabel')
+                    : null
+                ;
+                if(currentNode && nextStateNode === currentNode){
+                    return;
+                }
+                this.lastHoveredStateValue = null;
+                this.resetStateHoverVisuals();
                 if(controllerMethods && controllerMethods.handleOnMouseLeaveState){
                     controllerMethods.handleOnMouseLeaveState();
                 }
@@ -418,6 +471,56 @@ class HierarchyD3 {
             }
             controllerMethods.handleOnClickBackground();
         });
+    }
+
+    bindSvgHoverClear(controllerMethods){
+        if(!this.svg){
+            return;
+        }
+        this.svg
+            .on('mousemove.hoverclear', (event)=>{
+                const target = event && event.target ? event.target : null;
+                const isCommunityTarget = Boolean(
+                    target
+                    && typeof target.closest === 'function'
+                    && target.closest('.communityNode')
+                );
+                const isStateTarget = Boolean(
+                    target
+                    && typeof target.closest === 'function'
+                    && target.closest('.stateNode, .stateLabel')
+                );
+
+                if(!isCommunityTarget && this.lastHoveredCommunityIndex !== null){
+                    this.lastHoveredCommunityIndex = null;
+                    if(controllerMethods && controllerMethods.handleOnMouseLeaveCommunity){
+                        controllerMethods.handleOnMouseLeaveCommunity();
+                    }
+                }
+                if(!isStateTarget && this.lastHoveredStateValue !== null){
+                    this.lastHoveredStateValue = null;
+                    this.resetStateHoverVisuals();
+                    if(controllerMethods && controllerMethods.handleOnMouseLeaveState){
+                        controllerMethods.handleOnMouseLeaveState();
+                    }
+                }
+            })
+            .on('mouseleave.hoverclear', ()=>{
+                if(this.lastHoveredCommunityIndex !== null){
+                    this.lastHoveredCommunityIndex = null;
+                    if(controllerMethods && controllerMethods.handleOnMouseLeaveCommunity){
+                        controllerMethods.handleOnMouseLeaveCommunity();
+                    }
+                }
+                if(this.lastHoveredStateValue !== null){
+                    this.lastHoveredStateValue = null;
+                    this.resetStateHoverVisuals();
+                    if(controllerMethods && controllerMethods.handleOnMouseLeaveState){
+                        controllerMethods.handleOnMouseLeaveState();
+                    }
+                }
+            })
+        ;
     }
 
     updateNativeTitle(selection, titleAccessor){
@@ -740,6 +843,151 @@ class HierarchyD3 {
         this.communityLayer.selectAll('*').remove();
         this.stateLayer.selectAll('*').remove();
         this.labelLayer.selectAll('*').remove();
+        if(this.emphasisLayer){
+            this.emphasisLayer.selectAll('*').remove();
+        }
+    }
+
+    renderCommunitySelectionOverlay(selectedIndexSet){
+        if(!this.emphasisLayer){
+            return;
+        }
+        const shouldRenderSingleSelection = selectedIndexSet && selectedIndexSet.size === 1;
+        if(!shouldRenderSingleSelection){
+            this.emphasisLayer.selectAll('.selectedOverlayRect').remove();
+            this.emphasisLayer.selectAll('.selectedOverlayCircle').remove();
+            return;
+        }
+
+        const selectedCommunityNodes = this.communityLayer
+            .selectAll('.communityNode')
+            .filter((node)=>selectedIndexSet.has(node.data.itemData.index))
+            .data()
+        ;
+        const rectOverlayData = [];
+        const circleOverlayData = [];
+        selectedCommunityNodes.forEach((node)=>{
+            const index = node && node.data && node.data.itemData ? node.data.itemData.index : null;
+            if(index === null || index === undefined){
+                return;
+            }
+            if(Number.isFinite(node.r)){
+                circleOverlayData.push({
+                    key: String(index),
+                    x: node.x,
+                    y: node.y,
+                    r: Math.max(4.2, node.r + 1.6)
+                });
+                return;
+            }
+            const x0 = Number(node.x0);
+            const x1 = Number(node.x1);
+            const y0 = Number(node.y0);
+            const y1 = Number(node.y1);
+            if(!Number.isFinite(x0) || !Number.isFinite(x1) || !Number.isFinite(y0) || !Number.isFinite(y1)){
+                return;
+            }
+            const rawWidth = Math.max(0, x1 - x0);
+            const rawHeight = Math.max(0, y1 - y0);
+            const centerX = (x0 + x1) / 2;
+            const centerY = (y0 + y1) / 2;
+            const minVisibleSize = 8;
+            const paddedWidth = Math.max(minVisibleSize, rawWidth + 3);
+            const paddedHeight = Math.max(minVisibleSize, rawHeight + 3);
+            rectOverlayData.push({
+                key: String(index),
+                x: centerX - (paddedWidth / 2),
+                y: centerY - (paddedHeight / 2),
+                width: paddedWidth,
+                height: paddedHeight
+            });
+        });
+
+        this.emphasisLayer
+            .selectAll('.selectedOverlayRect')
+            .data(rectOverlayData, (item)=>item.key)
+            .join(
+                (enter)=>enter.append('rect').attr('class', 'selectedOverlayRect'),
+                (update)=>update,
+                (exit)=>exit.remove()
+            )
+            .attr('x', (item)=>item.x)
+            .attr('y', (item)=>item.y)
+            .attr('width', (item)=>item.width)
+            .attr('height', (item)=>item.height)
+            .attr('fill', 'none')
+            .attr('stroke', this.selectedCommunityStrokeColor)
+            .attr('stroke-width', 2.8)
+            .attr('stroke-opacity', 1)
+            .attr('rx', 1.5)
+            .attr('ry', 1.5)
+        ;
+
+        this.emphasisLayer
+            .selectAll('.selectedOverlayCircle')
+            .data(circleOverlayData, (item)=>item.key)
+            .join(
+                (enter)=>enter.append('circle').attr('class', 'selectedOverlayCircle'),
+                (update)=>update,
+                (exit)=>exit.remove()
+            )
+            .attr('cx', (item)=>item.x)
+            .attr('cy', (item)=>item.y)
+            .attr('r', (item)=>item.r)
+            .attr('fill', 'none')
+            .attr('stroke', this.selectedCommunityStrokeColor)
+            .attr('stroke-width', 2.8)
+            .attr('stroke-opacity', 1)
+        ;
+    }
+
+    resetStateHoverVisuals(){
+        const selectedStateSet = this.selectedStateSet || new Set();
+        const hasSelectedStates = selectedStateSet.size > 0;
+        const stateNodeSelection = this.stateLayer.selectAll('.stateNode');
+        const stateLabelSelection = this.labelLayer.selectAll('.stateLabel');
+
+        stateNodeSelection.select('.stateShape')
+            .attr('stroke', (node)=>{
+                if(hasSelectedStates && selectedStateSet.has(node.data.name)){
+                    return this.selectedStrokeColor;
+                }
+                return '#264653';
+            })
+            .attr('stroke-width', (node)=>{
+                if(hasSelectedStates && selectedStateSet.has(node.data.name)){
+                    return this.selectedStrokeWidth;
+                }
+                return 1.2;
+            })
+            .attr('stroke-opacity', (node)=>{
+                if(!hasSelectedStates){
+                    return 1;
+                }
+                return selectedStateSet.has(node.data.name) ? 1 : 0.4;
+            })
+            .attr('stroke-dasharray', null)
+        ;
+        stateLabelSelection
+            .style('opacity', (node)=>{
+                if(!hasSelectedStates){
+                    return 1;
+                }
+                return selectedStateSet.has(node.data.name) ? 1 : 0.45;
+            })
+            .style('font-weight', (node)=>{
+                if(!hasSelectedStates){
+                    return 500;
+                }
+                return selectedStateSet.has(node.data.name) ? 700 : 500;
+            })
+            .attr('fill', (node)=>{
+                if(!hasSelectedStates){
+                    return '#111827';
+                }
+                return selectedStateSet.has(node.data.name) ? '#0f172a' : '#64748b';
+            })
+        ;
     }
 
     renderHierarchy(visData, controllerMethods, layoutType = 'treemap', tooltipAttributes = {}){
@@ -755,6 +1003,7 @@ class HierarchyD3 {
         }
         this.bindBackgroundEvents(controllerMethods);
         this.bindSvgBlankClick(controllerMethods);
+        this.bindSvgHoverClear(controllerMethods);
         const renderHeight = this.getLayoutRenderHeight(layoutType, visData);
         this.setRenderableHeight(renderHeight);
 
@@ -799,6 +1048,7 @@ class HierarchyD3 {
                 .attr('stroke', '#ffffff')
                 .attr('stroke-width', 0.5)
                 .attr('stroke-opacity', 1)
+                .style('filter', null)
             ;
             stateNodeSelection.select('.stateShape')
                 .attr('stroke', '#264653')
@@ -811,6 +1061,7 @@ class HierarchyD3 {
                 .style('font-weight', 500)
                 .attr('fill', '#111827')
             ;
+            this.renderCommunitySelectionOverlay(selectedIndexSet);
             return;
         }
 
@@ -829,7 +1080,7 @@ class HierarchyD3 {
         communityNodeSelection.select('.communityShape')
             .attr('stroke', (node)=>{
                 if(selectedIndexSet.has(node.data.itemData.index)){
-                    return this.selectedStrokeColor;
+                    return this.selectedCommunityStrokeColor;
                 }
                 const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
                 if(parentStateName && selectedStateSet.has(parentStateName)){
@@ -839,7 +1090,7 @@ class HierarchyD3 {
             })
             .attr('stroke-width', (node)=>{
                 if(selectedIndexSet.has(node.data.itemData.index)){
-                    return this.selectedStrokeWidth;
+                    return this.selectedCommunityStrokeWidth;
                 }
                 const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
                 if(parentStateName && selectedStateSet.has(parentStateName)){
@@ -856,6 +1107,12 @@ class HierarchyD3 {
                     return 0.95;
                 }
                 return 1;
+            })
+            .style('filter', (node)=>{
+                if(selectedIndexSet.has(node.data.itemData.index)){
+                    return this.selectedCommunityShadow;
+                }
+                return null;
             })
         ;
         stateNodeSelection.select('.stateShape')
@@ -881,6 +1138,7 @@ class HierarchyD3 {
             .filter((node)=>selectedStateSet.has(node.data.name))
             .raise()
         ;
+        this.renderCommunitySelectionOverlay(selectedIndexSet);
     }
 
     highlightHoveredItem(hoveredItem){
@@ -903,16 +1161,20 @@ class HierarchyD3 {
             return;
         }
         hoveredCommunitySelection.select('.communityShape')
-            .attr('stroke', this.hoverStrokeColor)
-            .attr('stroke-width', this.hoverStrokeWidth)
+            .attr('stroke', this.hoverCommunityStrokeColor)
+            .attr('stroke-width', this.hoverCommunityStrokeWidth)
             .attr('stroke-opacity', 1)
         ;
     }
 
     highlightHoveredState(hoveredState){
         if(hoveredState === null || hoveredState === undefined || hoveredState === ""){
+            this.resetStateHoverVisuals();
             return;
         }
+
+        // Ensure only one hovered state style is visible at a time.
+        this.resetStateHoverVisuals();
 
         const hoveredStateName = this.getStateLabel(hoveredState);
         if(this.selectedStateSet.has(hoveredStateName)){
@@ -939,6 +1201,10 @@ class HierarchyD3 {
     }
 
     clear = function(){
+        this.lastHoveredCommunityIndex = null;
+        this.lastHoveredStateValue = null;
+        this.selectedStateSet = new Set();
+        this.selectedCommunityIndexSet = new Set();
         d3.select(this.el).selectAll('*').remove();
     }
 }

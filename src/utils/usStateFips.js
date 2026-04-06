@@ -69,7 +69,7 @@ export const normalizeFipsStateCode = function(stateCode){
     return Math.trunc(numericCode);
 };
 
-export const getStateNameFromFips = function(stateCode){
+const getStateNameFromFips = function(stateCode){
     const normalizedCode = normalizeFipsStateCode(stateCode);
     if(normalizedCode === null){
         return null;
@@ -89,14 +89,4 @@ export const getStateLabelFromFips = function(stateCode){
     }
 
     return 'Unknown state';
-};
-
-export const getStateNameWithCodeFromFips = function(stateCode){
-    const stateName = getStateNameFromFips(stateCode);
-    const normalizedCode = normalizeFipsStateCode(stateCode);
-
-    if(stateName && normalizedCode !== null){
-        return `${stateName} (${String(normalizedCode).padStart(2, '0')})`;
-    }
-    return getStateLabelFromFips(stateCode);
 };

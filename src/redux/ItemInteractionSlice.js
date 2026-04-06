@@ -7,7 +7,7 @@ const initialState = {
   hoveredState: null
 }
 
-export const itemInteractionSlice = createSlice({
+const itemInteractionSlice = createSlice({
   name: 'itemInteraction',
   initialState,
   reducers: {

@@ -31,14 +31,14 @@ const getDimensionTooltipText = (dimension)=>{
 
 const CONTROL_PANEL_TOOLTIP_TEXT = [
     'How to use this panel:',
-    '1) Give each dimension an integer score from 0 to 10.',
-    '2) Dimension weight = score / sum of all six scores.',
+    '1) Give each dimension an integer importance from 0 to 10.',
+    '2) Dimension weight = importance / sum of all six importance values.',
     '3) Hover each dimension name to inspect its feature-level rule.',
     '4) Updates are applied to all linked views in real time.'
 ].join('\n');
 
 // Scatter dropdown order:
-// [dimension score] -> [that dimension's selected features], repeated by dimension.
+// [dimension importance input] -> [that dimension's selected features], repeated by dimension.
 // Excludes the overall livability score.
 const SCATTER_ATTRIBUTE_OPTIONS = Array.from(
     new Set(
@@ -70,7 +70,6 @@ const toClampedRating = (value)=>{
 function App() {
     const dataSet = useSelector((state)=>state.dataSet);
     const selectedItems = useSelector((state)=>state.itemInteraction.selectedItems);
-    const dataSetSize = dataSet.length;
     const dispatch = useDispatch();
 
     const [dimensionRatings, setDimensionRatings] = useState(
@@ -99,19 +98,9 @@ function App() {
         );
     }, [dataSet, normalizedDimensionWeights]);
 
-    // did mount / did unmount profile
     useEffect(()=>{
-        console.log('App did mount');
         dispatch(getDataSet());
-        return ()=>{
-            console.log('App did unmount');
-        };
     }, [dispatch]);
-
-    // update profile: runs only when dependency changes
-    useEffect(()=>{
-        console.log('App dependency update: dataSetSize=', dataSetSize);
-    }, [dataSetSize]);
 
     const handleDimensionRatingChange = (dimensionId, nextInputValue)=>{
         const clampedValue = toClampedRating(nextInputValue);
@@ -169,7 +158,7 @@ function App() {
                                     </span>
                                 </div>
                                 <div className="dimensionWeightControls">
-                                    <span className="dimensionWeightUnit">Score</span>
+                                    <span className="dimensionWeightUnit">Importance</span>
                                     <input
                                         type="number"
                                         min="0"
@@ -178,7 +167,7 @@ function App() {
                                         value={rawInputValue}
                                         onChange={(event)=>handleDimensionRatingChange(dimension.id, event.target.value)}
                                         className="dimensionWeightNumberInput"
-                                        aria-label={`${dimension.label} score numeric input`}
+                                        aria-label={`${dimension.label} importance numeric input`}
                                     />
                                     <span className="dimensionWeightUnit">/10</span>
                                 </div>

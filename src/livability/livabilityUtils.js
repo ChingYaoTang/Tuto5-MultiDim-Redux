@@ -13,37 +13,7 @@ const toFiniteNumber = (value, fallback = 0)=>{
     return Number.isFinite(numericValue) ? numericValue : fallback;
 };
 
-export const getDefaultDimensionWeightInputs = (dimensions)=>{
-    return dimensions.reduce((accumulator, dimension)=>{
-        accumulator[dimension.id] = Math.round(dimension.defaultWeight * 100);
-        return accumulator;
-    }, {});
-};
-
-export const normalizeDimensionWeights = (weightInputs, dimensions)=>{
-    const rawWeights = dimensions.map((dimension)=>{
-        const inputValue = toFiniteNumber(weightInputs[dimension.id], dimension.defaultWeight * 100);
-        return {
-            id: dimension.id,
-            weight: Math.max(0, inputValue)
-        };
-    });
-
-    const rawWeightSum = rawWeights.reduce((total, item)=>total + item.weight, 0);
-    if(rawWeightSum <= 0){
-        return dimensions.reduce((accumulator, dimension)=>{
-            accumulator[dimension.id] = dimension.defaultWeight;
-            return accumulator;
-        }, {});
-    }
-
-    return rawWeights.reduce((accumulator, item)=>{
-        accumulator[item.id] = item.weight / rawWeightSum;
-        return accumulator;
-    }, {});
-};
-
-export const computeDimensionScore = (itemData, dimension)=>{
+const computeDimensionScore = (itemData, dimension)=>{
     const weightedScore = dimension.features.reduce((scoreTotal, feature)=>{
         const rawValue = clamp01(toFiniteNumber(itemData[feature.field], 0));
         const orientedValue = feature.direction === 'lower'
@@ -78,5 +48,3 @@ export const enrichDataWithLivability = (visData, dimensions, normalizedDimensio
         };
     });
 };
-
-export const formatNormalizedPercent = (ratio)=>`${(toFiniteNumber(ratio, 0) * 100).toFixed(1)}%`;

@@ -30,6 +30,7 @@ function ScatterplotContainer({
     const selectedItems = useSelector(state =>state.itemInteraction.selectedItems)
     const selectedItemsSource = useSelector(state =>state.itemInteraction.selectedItemsSource)
     const hoveredItem = useSelector(state =>state.itemInteraction.hoveredItem)
+    const hoveredState = useSelector(state =>state.itemInteraction.hoveredState)
     const dispatch = useDispatch();
     const [selectedXAttribute, setSelectedXAttribute] = useState(xAttributeName);
     const [selectedYAttribute, setSelectedYAttribute] = useState(yAttributeName);
@@ -84,12 +85,20 @@ function ScatterplotContainer({
         }
     },[]);
 
-    const applyHighlights = function(){
+    const applyBaseHighlights = function(){
         const scatterplotD3 = scatterplotD3Ref.current;
         if(!scatterplotD3){
             return;
         }
         scatterplotD3.highlightSelectedItems(selectedItems);
+        scatterplotD3.highlightHoveredState(hoveredState);
+    }
+
+    const applyHoverHighlight = function(){
+        const scatterplotD3 = scatterplotD3Ref.current;
+        if(!scatterplotD3){
+            return;
+        }
         scatterplotD3.highlightHoveredItem(hoveredItem);
     }
 
@@ -145,7 +154,8 @@ function ScatterplotContainer({
             controllerMethods,
             ATTRIBUTE_DIRECTION_BY_FIELD
         );
-        applyHighlights();
+        applyBaseHighlights();
+        applyHoverHighlight();
     }
 
     useEffect(()=>{
@@ -174,8 +184,13 @@ function ScatterplotContainer({
     }, [selectedItems]);
 
     useEffect(()=>{
-        applyHighlights();
-    },[selectedItems, hoveredItem]);
+        applyBaseHighlights();
+        applyHoverHighlight();
+    },[selectedItems, hoveredState]);
+
+    useEffect(()=>{
+        applyHoverHighlight();
+    },[hoveredItem]);
 
     useEffect(()=>{
         const scatterplotD3 = scatterplotD3Ref.current;
