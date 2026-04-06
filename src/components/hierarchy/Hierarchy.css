@@ -1,3 +1,5 @@
+/* Beyond tutorial scope:
+   Styling for switchable hierarchy layouts and linked hover/selection states. */
 .hierarchyPanel{
     height: 100%;
     display: flex;

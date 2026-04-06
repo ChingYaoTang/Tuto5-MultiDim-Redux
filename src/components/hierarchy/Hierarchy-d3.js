@@ -2,6 +2,9 @@ import * as d3 from 'd3'
 import { getStateLabelFromFips, normalizeFipsStateCode } from '../../utils/usStateFips';
 import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
+// Beyond tutorial scope:
+// Full hierarchy view with switchable treemap/pack/tree layouts and linked highlighting.
+
 class HierarchyD3 {
     margin = {top: 42, right: 6, bottom: 6, left: 6};
     size;
@@ -52,6 +55,7 @@ class HierarchyD3 {
         this.height = this.size.height - this.margin.top - this.margin.bottom;
         this.currentRenderHeight = this.height;
 
+        // Create SVG scaffold once; renderHierarchy() updates these layers.
         this.rootSvg = d3.select(this.el).append('svg')
             .attr('width', this.width + this.margin.left + this.margin.right)
             .attr('height', this.currentRenderHeight + this.margin.top + this.margin.bottom)
@@ -82,6 +86,7 @@ class HierarchyD3 {
             .attr('fill', 'transparent')
         ;
 
+        // Keep explicit layers so the update pattern stays readable.
         this.linkLayer = this.svg.append('g').attr('class', 'linkLayer');
         this.communityLayer = this.svg.append('g').attr('class', 'communityLayer');
         this.stateLayer = this.svg.append('g').attr('class', 'stateLayer');
@@ -189,6 +194,7 @@ class HierarchyD3 {
         ;
     }
 
+    // Beyond tutorial scope: runtime layout switching across multiple hierarchy encodings.
     computeLayoutRoot(visData, layoutType, renderHeight){
         const root = this.buildHierarchyRoot(visData);
 
@@ -538,6 +544,7 @@ class HierarchyD3 {
         const stateNodes = this.getStateNodes(root);
         const communityNodes = this.getCommunityNodes(root);
 
+        // Keyed join for states.
         const stateJoin = this.stateLayer
             .selectAll('.stateNode')
             .data(stateNodes, (node)=>node.data.name)
@@ -594,6 +601,7 @@ class HierarchyD3 {
         this.bindStateEvents(stateLabelJoin, controllerMethods);
         this.updateNativeTitle(stateLabelJoin, (node)=>this.getStateTooltipText(node));
 
+        // Keyed join for communities.
         const communityJoin = this.communityLayer
             .selectAll('.communityNode')
             .data(communityNodes, (node)=>node.data.itemData.index)
@@ -721,6 +729,7 @@ class HierarchyD3 {
         this.updateNativeTitle(communityJoin, (node)=>this.getCommunityTooltipText(node));
     }
 
+    // Beyond tutorial scope: explicit node-link tree rendering in addition to space-filling layouts.
     renderTreeLayout(root, controllerMethods){
         const stateNodes = this.getStateNodes(root);
         const communityNodes = this.getCommunityNodes(root);
@@ -995,6 +1004,7 @@ class HierarchyD3 {
             return;
         }
 
+        // Render flow: update scales/layout -> clear old layout marks -> join new marks.
         this.currentLayoutType = layoutType;
         this.tooltipXAttributeName = tooltipAttributes.xAttributeName || null;
         this.tooltipYAttributeName = tooltipAttributes.yAttributeName || null;
@@ -1205,6 +1215,7 @@ class HierarchyD3 {
         this.lastHoveredStateValue = null;
         this.selectedStateSet = new Set();
         this.selectedCommunityIndexSet = new Set();
+        // Unmount cleanup.
         d3.select(this.el).selectAll('*').remove();
     }
 }

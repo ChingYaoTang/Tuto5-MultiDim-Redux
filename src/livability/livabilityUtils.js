@@ -1,3 +1,5 @@
+// Beyond tutorial scope:
+// Utility layer for livability scoring, weight normalization, and enrichment.
 const clamp01 = (value)=>{
     if(value < 0){
         return 0;

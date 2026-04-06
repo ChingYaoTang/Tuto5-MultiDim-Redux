@@ -7,6 +7,9 @@ import { LIVABILITY_DIMENSIONS } from '../../livability/livabilityConfig';
 import { setHoveredItem, setHoveredState, setSelectedItems } from '../../redux/ItemInteractionSlice';
 import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
+// Beyond tutorial scope:
+// Adds axis selectors + linked-view brush/click/hover orchestration.
+
 const ATTRIBUTE_DIRECTION_BY_FIELD = LIVABILITY_DIMENSIONS.reduce((accumulator, dimension)=>{
     accumulator[dimension.scoreField] = 'higher';
     dimension.features.forEach((feature)=>{
@@ -73,6 +76,7 @@ function ScatterplotContainer({
         return {width:width,height:height};
     }
 
+    // Mount/unmount lifecycle: create D3 instance once, clear on unmount.
     useEffect(()=>{
         const scatterplotD3 = new ScatterplotD3(chartDivContainerRef.current);
         scatterplotD3.create({size:getChartSize()});
@@ -107,6 +111,7 @@ function ScatterplotContainer({
         if(!scatterplotD3){
             return;
         }
+        // Controller callbacks are passed to D3 and dispatch Redux actions.
         const handleOnClick = function(itemData){
             const scatterplotD3 = scatterplotD3Ref.current;
             if(scatterplotD3){
@@ -158,6 +163,7 @@ function ScatterplotContainer({
         applyHoverHighlight();
     }
 
+    // Update lifecycle: rerender D3 view when data or visual encoding changes.
     useEffect(()=>{
         renderScatterplot();
     },[visData, selectedXAttribute, selectedYAttribute, colorAttributeName]);
@@ -180,6 +186,7 @@ function ScatterplotContainer({
     }, [selectedXAttribute, selectedYAttribute, onAxisSelectionChange]);
 
     useEffect(()=>{
+        // Keep latest selection in ref so callbacks always read fresh value.
         selectedItemsRef.current = selectedItems;
     }, [selectedItems]);
 

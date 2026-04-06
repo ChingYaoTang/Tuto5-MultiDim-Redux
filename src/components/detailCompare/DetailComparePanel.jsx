@@ -6,6 +6,9 @@ import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 import { getStateLabelFromFips } from '../../utils/usStateFips';
 import { setHoveredItem, setHoveredState, setSelectedItems } from '../../redux/ItemInteractionSlice';
 
+// Beyond tutorial scope:
+// Adds narrative summary/detail/compare logic on top of the linked views.
+
 const GUIDE_HINTS = [
     'Brush points in the scatterplot to compare communities.',
     'Click a state in the hierarchy to focus its communities.'

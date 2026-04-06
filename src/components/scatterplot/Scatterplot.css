@@ -1,3 +1,5 @@
+/* Beyond tutorial scope:
+   Scatterplot toolbar, legend, and polish for linked interactions. */
 .scatterplotPanel{
     height: 100%;
     display: flex;

@@ -1,3 +1,5 @@
+// Beyond tutorial scope:
+// FIPS-to-state helpers for readable labels in tooltips and hierarchy nodes.
 const US_STATE_FIPS_NAME_MAP = Object.freeze({
     1: 'Alabama',
     2: 'Alaska',

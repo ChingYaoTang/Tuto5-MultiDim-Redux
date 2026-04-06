@@ -2,6 +2,10 @@ import * as d3 from 'd3'
 import { getStateLabelFromFips } from '../../utils/usStateFips';
 import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
+// Beyond tutorial scope:
+// Extends the Tuto create/render/update pattern with linked brush interactions,
+// custom legend/metadata text, and performance-oriented highlight updates.
+
 let scatterplotIdCounter = 0;
 
 class ScatterplotD3 {
@@ -31,6 +35,7 @@ class ScatterplotD3 {
     colorScale;
     colorLegendHeight = 136;
     colorLegendWidth = 14;
+    // Beyond tutorial scope: custom diverging interpolation tuning for better contrast.
     colorInterpolator = (value)=>{
         // low value -> red, high value -> blue
         const clampedValue = Math.max(0, Math.min(1, Number(value)));
@@ -120,7 +125,7 @@ class ScatterplotD3 {
         this.xScale = d3.scaleLinear().range([0,this.width]);
         this.yScale = d3.scaleLinear().range([this.height,0]);
 
-        // build x/y grids + axis
+        // Create axis/grid layers once; later updates only modify these layers.
         this.xGridG = this.svg.append("g")
             .attr("class","xGridG")
             .attr("transform","translate(0,"+this.height+")")
@@ -160,6 +165,7 @@ class ScatterplotD3 {
             .attr("text-anchor","middle")
             .text("Y Axis")
         ;
+        // Beyond tutorial scope: dynamic color legend and explanatory note.
         this.colorLegendG = this.svg.append("g")
             .attr("class","scatterplotColorLegend")
             .attr("transform",`translate(${this.width + 16},12)`)
@@ -205,6 +211,7 @@ class ScatterplotD3 {
             .attr("class","scatterplotColorLegendAxis")
             .attr("transform",`translate(${this.colorLegendWidth},0)`)
         ;
+        // Beyond tutorial scope: persistent brush layer for linked multiview selection.
         this.brushG = this.svg.append("g")
             .attr("class","brushG")
         ;
@@ -215,6 +222,7 @@ class ScatterplotD3 {
         this.itemPixelCache = [];
         this.itemByIndex.clear();
         this.indexesByState.clear();
+        // Precompute screen coordinates so brush selection does not query DOM each frame.
         visData.forEach((item)=>{
             this.itemByIndex.set(item.index, item);
             if(item.state !== undefined && item.state !== null){
@@ -722,13 +730,14 @@ class ScatterplotD3 {
         ;
     }
 
+    // Beyond tutorial scope: supports directional axis reversal and transition cooldown.
     updateAxis = function(visData,xAttribute,yAttribute, animateTransition = true){
         const xAxisReversed = this.isLowerBetterAttribute(xAttribute);
         const yAxisReversed = this.isLowerBetterAttribute(yAttribute);
         this.xScale.range(xAxisReversed ? [this.width, 0] : [0, this.width]);
         this.yScale.range(yAxisReversed ? [0, this.height] : [this.height, 0]);
 
-        // compute min max using d3.min/max(visData.map(item=>item.attribute))
+        // Compute domain from current encoded attributes.
         const xValues = visData
             .map((item)=>this.getRawNumericValue(item, xAttribute))
             .filter((value)=>Number.isFinite(value))
@@ -794,8 +803,7 @@ class ScatterplotD3 {
                 .call(yGridAxis)
             ;
 
-            // create axis with computed scales
-            // .xAxisG and .yAxisG are initialized in create() function
+            // Update already-created axis groups with new scale definitions.
             xAxisG
                 .transition("axis-update")
                 .duration(this.transitionDuration)
@@ -874,6 +882,7 @@ class ScatterplotD3 {
         ;
     }
 
+    // Beyond tutorial scope: requestAnimationFrame brush preview + synchronized dispatch.
     bindBrushInteraction = function(){
         if(!this.brushG || this.brushBehavior){
             return;
@@ -1000,7 +1009,7 @@ class ScatterplotD3 {
             this.lastAxisTransitionTs = now;
         }
 
-        // build the size scales and x,y axis
+        // Typical D3 update cycle: update scales/axes first, then join data to marks.
         this.updateChartTexts(meta);
         if(needsColorUpdate){
             this.updateColorScaleAndLegend(visData, colorAttribute);
@@ -1012,12 +1021,11 @@ class ScatterplotD3 {
         }
 
         this.svg.selectAll(".markerG")
-            // all elements with the class .cellG (empty the first time)
+            // Keyed join keeps marker identity stable across updates.
             .data(visData,(itemData)=>itemData.index)
             .join(
                 enter=>{
-                    // all data items to add:
-                    // doesn’exist in the select but exist in the new array
+                    // Enter selection: create missing marker groups.
                     const itemG=enter.append("g")
                         .attr("class","markerG")
                         .style("opacity",this.defaultOpacity)
@@ -1050,7 +1058,7 @@ class ScatterplotD3 {
                     itemG.each((itemData, itemIndex, nodes)=>{
                         this.markerGroupByIndex.set(itemData.index, nodes[itemIndex]);
                     });
-                    // render element as child of each element "g"
+                    // Create mark primitives once; their attributes are updated below.
                     itemG.append("circle")
                         .attr("class","markerCircle")
                         .attr("r",this.circleRadius)
@@ -1083,6 +1091,7 @@ class ScatterplotD3 {
                     })
                 },
                 exit =>{
+                    // Exit selection: remove markers no longer present in data.
                     exit.each((itemData)=>{
                         this.markerGroupByIndex.delete(itemData.index);
                     });
@@ -1150,6 +1159,7 @@ class ScatterplotD3 {
         this.currentColorAttribute = null;
         this.attributeDirectionByField = null;
         this.lastAxisTransitionTs = 0;
+        // Unmount cleanup.
         d3.select(this.el).selectAll("*").remove();
     }
 }

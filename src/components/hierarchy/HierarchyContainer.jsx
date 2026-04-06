@@ -5,6 +5,9 @@ import { useDispatch, useSelector } from 'react-redux'
 import HierarchyD3 from './Hierarchy-d3';
 import { setHoveredItem, setHoveredState, setSelectedItems } from '../../redux/ItemInteractionSlice';
 
+// Beyond tutorial scope:
+// Adds a second linked view with multiple hierarchy layouts and coordinated interactions.
+
 const LAYOUT_OPTIONS = [
     {id: 'treemap', label: 'Treemap'},
     {id: 'pack', label: 'Circle Pack'},
@@ -59,6 +62,7 @@ function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribu
         return {width: width, height: height};
     }
 
+    // Mount/unmount lifecycle for the D3 class instance.
     useEffect(()=>{
         const hierarchyD3 = new HierarchyD3(divContainerRef.current);
         hierarchyD3.create({size: getChartSize()});
@@ -87,6 +91,7 @@ function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribu
         if(!hierarchyD3){
             return;
         }
+        // React handlers are injected into D3 so interactions can dispatch Redux actions.
         const controllerMethods = {
             handleOnClickCommunity: (itemData)=>{
                 dispatch(setHoveredItem({}));
@@ -155,11 +160,13 @@ function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribu
         applyHighlights();
     }
 
+    // Re-render the D3 view when data/layout/tooltip encoding changes.
     useEffect(()=>{
         renderHierarchy();
     }, [visData, layoutType, tooltipXAttribute, tooltipYAttribute]);
 
     useEffect(()=>{
+        // Keep a fresh reference for click toggles inside D3 callbacks.
         selectedItemsRef.current = selectedItems;
     }, [selectedItems]);
 
@@ -172,7 +179,6 @@ function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribu
             <div className="hierarchyToolbar">
                 {LAYOUT_OPTIONS.map((option)=>{
                     const activeClass = option.id === layoutType ? 'active' : '';
-                    const preferredText = option.id === PREFERRED_LAYOUT ? ' (preferred)' : '';
                     return (
                         <button
                             key={option.id}
@@ -180,7 +186,7 @@ function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribu
                             className={`layoutButton ${activeClass}`.trim()}
                             onClick={()=>setLayoutType(option.id)}
                         >
-                            {option.label}{preferredText}
+                            {option.label}
                         </button>
                     );
                 })}

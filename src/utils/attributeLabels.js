@@ -1,3 +1,5 @@
+// Beyond tutorial scope:
+// Human-readable semantic labels for dataset fields used across linked views.
 const ATTRIBUTE_LABELS = {
     livabilityScore: 'Livability Score',
     livabilitySafetyScore: 'Safety Score',

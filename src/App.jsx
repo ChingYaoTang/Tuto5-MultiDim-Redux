@@ -10,6 +10,10 @@ import {
     enrichDataWithLivability
 } from './livability/livabilityUtils';
 
+// Beyond tutorial scope:
+// This App integrates a custom livability model, linked multiview orchestration,
+// and an additional narrative/compare panel.
+
 const getDimensionTooltipText = (dimension)=>{
     return [
         `${dimension.label}`,
@@ -68,16 +72,19 @@ const toClampedRating = (value)=>{
 
 // a component is a piece of code which render a part of the user interface
 function App() {
+    // Read global data and interaction state from Redux.
     const dataSet = useSelector((state)=>state.dataSet);
     const selectedItems = useSelector((state)=>state.itemInteraction.selectedItems);
     const dispatch = useDispatch();
 
+    // Local UI state for controls (dimension importance + scatter axes).
     const [dimensionRatings, setDimensionRatings] = useState(
         ()=>getDefaultDimensionRatings()
     );
     const [selectedScatterXAttribute, setSelectedScatterXAttribute] = useState(DEFAULT_SCATTER_X_ATTRIBUTE);
     const [selectedScatterYAttribute, setSelectedScatterYAttribute] = useState(DEFAULT_SCATTER_Y_ATTRIBUTE);
 
+    // Normalize user-provided 0-10 ratings into weights that sum to 1.
     const normalizedDimensionWeights = useMemo(()=>{
         const totalRating = Object.values(dimensionRatings)
             .reduce((sum, value)=>sum + toClampedRating(value), 0)
@@ -89,6 +96,7 @@ function App() {
         }, {});
     }, [dimensionRatings]);
 
+    // Derive visualization dataset from raw CSV + current livability weighting.
     const visDataWithLivability = useMemo(()=>{
         return enrichDataWithLivability(
             dataSet,
@@ -98,10 +106,12 @@ function App() {
         );
     }, [dataSet, normalizedDimensionWeights]);
 
+    // Initial data load on mount.
     useEffect(()=>{
         dispatch(getDataSet());
     }, [dispatch]);
 
+    // Controlled input handler for one dimension card.
     const handleDimensionRatingChange = (dimensionId, nextInputValue)=>{
         const clampedValue = toClampedRating(nextInputValue);
         setDimensionRatings((previousInputs)=>({
@@ -110,6 +120,7 @@ function App() {
         }));
     };
 
+    // Keep axis dropdowns synchronized with scatter interactions.
     const handleScatterAxisSelectionChange = useCallback((nextSelection = {})=>{
         const nextXAttribute = nextSelection.xAttributeName;
         const nextYAttribute = nextSelection.yAttributeName;

@@ -1,3 +1,5 @@
+// Beyond tutorial scope:
+// Custom multi-dimension livability domain model and default weights.
 export const LIVABILITY_SCORE_FIELD = 'livabilityScore';
 
 export const LIVABILITY_DIMENSIONS = [
