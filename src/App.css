@@ -8,6 +8,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overflow: auto;
 }
 
 .livabilityControlPanel{
@@ -35,6 +36,32 @@
     font-size: 16px;
     font-weight: 700;
     color: #0f172a;
+}
+
+.livabilityControlTitleRow{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panelInfoBadge{
+    width: 19px;
+    height: 19px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid #90a4bb;
+    color: #24496d;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 17px;
+    text-align: center;
+    cursor: help;
+    background: linear-gradient(180deg, #ffffff 0%, #e8eef6 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(15, 23, 42, 0.12);
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .livabilityControlSubtitle{
@@ -104,8 +131,8 @@
 }
 
 #MultiviewContainer{
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 0;
+    min-height: 430px;
 }
 
 .row {
@@ -143,5 +170,9 @@
     .row{
         flex-direction: column;
         overflow: auto;
+    }
+
+    #MultiviewContainer{
+        min-height: 520px;
     }
 }

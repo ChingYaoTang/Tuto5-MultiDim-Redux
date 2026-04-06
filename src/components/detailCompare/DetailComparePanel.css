@@ -1,0 +1,528 @@
+.detailComparePanel{
+    background: #ffffff;
+    border: 1px solid #d7dee8;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    padding: 10px 12px;
+    text-align: left;
+    height: 158px;
+    min-height: 158px;
+    max-height: 158px;
+    flex: 0 0 158px;
+    flex-shrink: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.detailCompareHeader{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.detailCompareHeader h2{
+    margin: 0;
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.detailCompareModeBadge{
+    border-radius: 999px;
+    border: 1px solid #9ca3af;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    background: #f8fafc;
+}
+
+.detailCompareGuideMode{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.detailCompareGuideMode p{
+    margin: 0;
+    color: #475569;
+    font-size: 17px;
+    line-height: 1.35;
+    font-weight: 500;
+}
+
+.detailDecisionCard{
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.detailDecisionCardCompact{
+    gap: 6px;
+}
+
+.detailSection{
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #f8fafc;
+}
+
+.detailSection h4{
+    margin: 0 0 6px 0;
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.detailCardHeaderRow{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.detailIdentityBlock{
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.detailIdentityInlineRow{
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.detailCommunityNameInline{
+    margin: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.detailInlineState{
+    color: #475569;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.detailInlineMetaDivider{
+    color: #94a3b8;
+    font-size: 10px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.detailInlineHeadline{
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.detailCommunityName{
+    margin: 0;
+    color: #0f172a;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.detailMetaLine{
+    margin: 3px 0 0 0;
+    color: #475569;
+    font-size: 13px;
+}
+
+.detailScorePill{
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 5px 10px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1;
+    flex-wrap: wrap;
+}
+
+.detailScorePill strong{
+    color: #0f172a;
+    font-size: 16px;
+}
+
+.detailScorePill small{
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.detailHeadline{
+    margin: 8px 0 0 0;
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.detailHeaderSectionCompact{
+    padding: 6px 8px;
+}
+
+.detailHeaderSectionCompact .detailCardHeaderRow{
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.detailHeaderSectionCompact .detailCommunityName{
+    font-size: 17px;
+    line-height: 1.1;
+}
+
+.detailHeaderSectionCompact .detailMetaLine{
+    margin-top: 1px;
+    font-size: 11px;
+}
+
+.detailHeaderSectionCompact .detailScorePill{
+    padding: 4px 10px;
+    border-radius: 10px;
+    gap: 7px;
+    font-size: 14px;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.detailHeaderSectionCompact .detailScorePill span{
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.detailHeaderSectionCompact .detailScorePill strong{
+    font-size: 21px;
+}
+
+.detailHeaderSectionCompact .detailScorePill small{
+    font-size: 14px;
+}
+
+.detailMetricsSectionCompact{
+    padding: 7px 9px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+}
+
+.compactMetricsColumn{
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.detailMetricsSectionCompact h4{
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.15;
+}
+
+.compactIndicatorsTitle{
+    padding-left: 18px;
+}
+
+.compactDimensionScoreGrid{
+    gap: 6px;
+}
+
+.compactDimensionScoreItem{
+    padding: 6px 8px;
+    border-radius: 6px;
+    gap: 8px;
+    align-items: center;
+    flex-direction: row;
+}
+
+.compactDimensionScoreItem span{
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.compactDimensionScoreItem .dimensionScoreValueBox{
+    margin-left: auto;
+    align-items: baseline;
+}
+
+.compactDimensionScoreItem .dimensionScoreValueBox strong{
+    font-size: 21px;
+    line-height: 1;
+}
+
+.compactDimensionScoreItem .dimensionScoreValueBox small{
+    font-size: 14px;
+    line-height: 1;
+}
+
+.dimensionScoreValueInline{
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.compactIndicatorList{
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 6px;
+}
+
+.compactIndicatorList li{
+    margin: 0;
+    border: 1px solid #dbe2ea;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    justify-content: center;
+}
+
+.compactIndicatorLabel{
+    color: #334155;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.15;
+}
+
+.compactIndicatorValue{
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.25;
+}
+
+.dimensionScoreGrid{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.dimensionScoreItem{
+    border: 1px solid #dbe2ea;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 5px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.dimensionScoreItem span{
+    color: #475569;
+    font-size: 12px;
+}
+
+.dimensionScoreItem strong{
+    color: #0f172a;
+    font-size: 13px;
+}
+
+.dimensionScoreValueBox{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+}
+
+.dimensionScoreValueBox small{
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.detailBulletList{
+    margin: 0;
+    padding-left: 18px;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.detailBulletList li{
+    margin: 3px 0;
+}
+
+.detailSummaryList{
+    margin-top: 6px;
+}
+
+.comparePanelBody{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.comparePanelMetaLine{
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.2;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.compareTableWrap{
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 1px solid #d8e0ea;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.compareTable{
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.compareTable th,
+.compareTable td{
+    border-bottom: 1px solid #e5ebf2;
+    padding: 8px 10px;
+    font-size: 16px;
+    line-height: 1.25;
+    color: #1f2937;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+}
+
+.compareTable th{
+    background: #f8fafc;
+    color: #374151;
+    font-weight: 700;
+    font-size: 17px;
+}
+
+.compareTable tbody tr:last-child td{
+    border-bottom: none;
+}
+
+.compareCommunityButton{
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: #1d4ed8;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.compareCommunityButton:hover{
+    color: #1e40af;
+}
+
+.compareCommunityButton:focus-visible{
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+@media (max-width: 980px){
+    .detailComparePanel{
+        height: 143px;
+        min-height: 143px;
+        max-height: 143px;
+        flex-basis: 143px;
+    }
+
+    .dimensionScoreGrid{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .detailMetricsSectionCompact{
+        grid-template-columns: 1fr;
+    }
+
+    .compactIndicatorList{
+        grid-auto-rows: auto;
+    }
+
+    .detailHeaderSectionCompact .detailCardHeaderRow{
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .detailHeaderSectionCompact .detailScorePill{
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 640px){
+    .detailComparePanel{
+        height: 128px;
+        min-height: 128px;
+        max-height: 128px;
+        flex-basis: 128px;
+    }
+
+    .dimensionScoreGrid{
+        grid-template-columns: 1fr;
+    }
+
+    .compactDimensionScoreGrid{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .compactDimensionScoreItem{
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .compactDimensionScoreItem .dimensionScoreValueBox{
+        margin-left: 0;
+    }
+
+    .dimensionScoreValueInline{
+        gap: 6px;
+    }
+
+    .detailScorePill{
+        width: 100%;
+        justify-content: space-between;
+        border-radius: 8px;
+    }
+
+    .comparePanelMetaLine{
+        font-size: 14px;
+    }
+
+    .compareTable th{
+        font-size: 14px;
+    }
+
+    .compareTable td{
+        font-size: 13px;
+    }
+}

@@ -22,11 +22,13 @@ function ScatterplotContainer({
     title,
     xAttributeOptions=[],
     yAttributeOptions=[],
-    visDataOverride
+    visDataOverride,
+    onAxisSelectionChange
 }){
     const dataSetFromStore = useSelector(state =>state.dataSet)
     const visData = visDataOverride || dataSetFromStore;
     const selectedItems = useSelector(state =>state.itemInteraction.selectedItems)
+    const selectedItemsSource = useSelector(state =>state.itemInteraction.selectedItemsSource)
     const hoveredItem = useSelector(state =>state.itemInteraction.hoveredItem)
     const dispatch = useDispatch();
     const [selectedXAttribute, setSelectedXAttribute] = useState(xAttributeName);
@@ -97,6 +99,10 @@ function ScatterplotContainer({
             return;
         }
         const handleOnClick = function(itemData){
+            const scatterplotD3 = scatterplotD3Ref.current;
+            if(scatterplotD3){
+                scatterplotD3.clearBrushSelection();
+            }
             const clickedIndex = itemData && itemData.index;
             const currentSelectedItems = selectedItemsRef.current || [];
             const isSamePointSelected = currentSelectedItems.length === 1
@@ -104,7 +110,10 @@ function ScatterplotContainer({
                 && String(currentSelectedItems[0].index) === String(clickedIndex)
             ;
             dispatch(setHoveredState(null));
-            dispatch(setSelectedItems(isSamePointSelected ? [] : [itemData]));
+            dispatch(setSelectedItems({
+                items: isSamePointSelected ? [] : [itemData],
+                source: 'scatter-click'
+            }));
         }
         const handleOnMouseEnter = function(itemData){
             dispatch(setHoveredItem(itemData));
@@ -115,7 +124,10 @@ function ScatterplotContainer({
             dispatch(setHoveredState(null));
         }
         const handleOnBrushSelection = function(selectedBrushItems){
-            dispatch(setSelectedItems(selectedBrushItems));
+            dispatch(setSelectedItems({
+                items: selectedBrushItems,
+                source: 'scatter-brush'
+            }));
         }
         const controllerMethods={
             handleOnClick,
@@ -149,6 +161,15 @@ function ScatterplotContainer({
     },[yAttributeName]);
 
     useEffect(()=>{
+        if(typeof onAxisSelectionChange === 'function'){
+            onAxisSelectionChange({
+                xAttributeName: selectedXAttribute,
+                yAttributeName: selectedYAttribute
+            });
+        }
+    }, [selectedXAttribute, selectedYAttribute, onAxisSelectionChange]);
+
+    useEffect(()=>{
         selectedItemsRef.current = selectedItems;
     }, [selectedItems]);
 
@@ -156,10 +177,23 @@ function ScatterplotContainer({
         applyHighlights();
     },[selectedItems, hoveredItem]);
 
+    useEffect(()=>{
+        const scatterplotD3 = scatterplotD3Ref.current;
+        if(!scatterplotD3){
+            return;
+        }
+        if(selectedItemsSource && selectedItemsSource !== 'scatter-brush'){
+            scatterplotD3.clearBrushSelection();
+        }
+    }, [selectedItemsSource]);
+
     const effectiveXOptions = xAttributeOptions.length>0 ? xAttributeOptions : [xAttributeName];
     const effectiveYOptions = yAttributeOptions.length>0 ? yAttributeOptions : [yAttributeName];
     return(
         <div className="scatterplotPanel col">
+            <div ref={chartDivContainerRef} className="scatterplotDivContainer">
+
+            </div>
             <div className="scatterplotToolbar">
                 <div className="scatterplotToolbarGroup">
                     <label htmlFor="scatter-x-attribute-select" className="scatterplotToolbarLabel">
@@ -195,9 +229,6 @@ function ScatterplotContainer({
                         ))}
                     </select>
                 </div>
-            </div>
-            <div ref={chartDivContainerRef} className="scatterplotDivContainer">
-
             </div>
         </div>
     )

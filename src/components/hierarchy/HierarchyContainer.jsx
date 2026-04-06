@@ -36,7 +36,7 @@ const hasSameSelectionByIndex = (leftItems = [], rightItems = [])=>{
     return true;
 };
 
-function HierarchyContainer({visDataOverride}){
+function HierarchyContainer({visDataOverride, tooltipXAttribute, tooltipYAttribute}){
     const dataSetFromStore = useSelector((state)=>state.dataSet);
     const visData = visDataOverride || dataSetFromStore;
     const selectedItems = useSelector((state)=>state.itemInteraction.selectedItems);
@@ -97,7 +97,10 @@ function HierarchyContainer({visDataOverride}){
                     && currentSelectedItems[0]
                     && String(currentSelectedItems[0].index) === String(clickedIndex)
                 ;
-                dispatch(setSelectedItems(isSameCommunitySelected ? [] : [itemData]));
+                dispatch(setSelectedItems({
+                    items: isSameCommunitySelected ? [] : [itemData],
+                    source: 'hierarchy-community'
+                }));
             },
             handleOnClickState: (stateData)=>{
                 dispatch(setHoveredItem({}));
@@ -110,12 +113,18 @@ function HierarchyContainer({visDataOverride}){
                 const isSameStateSelected = stateItems.length > 0
                     && hasSameSelectionByIndex(currentSelectedItems, stateItems)
                 ;
-                dispatch(setSelectedItems(isSameStateSelected ? [] : stateItems));
+                dispatch(setSelectedItems({
+                    items: isSameStateSelected ? [] : stateItems,
+                    source: 'hierarchy-state'
+                }));
             },
             handleOnClickBackground: ()=>{
                 dispatch(setHoveredItem({}));
                 dispatch(setHoveredState(null));
-                dispatch(setSelectedItems([]));
+                dispatch(setSelectedItems({
+                    items: [],
+                    source: 'hierarchy-background'
+                }));
             },
             handleOnMouseEnterCommunity: (itemData)=>{
                 dispatch(setHoveredItem(itemData));
@@ -134,13 +143,21 @@ function HierarchyContainer({visDataOverride}){
             }
         };
 
-        hierarchyD3.renderHierarchy(visData, controllerMethods, layoutType);
+        hierarchyD3.renderHierarchy(
+            visData,
+            controllerMethods,
+            layoutType,
+            {
+                xAttributeName: tooltipXAttribute,
+                yAttributeName: tooltipYAttribute
+            }
+        );
         applyHighlights();
     }
 
     useEffect(()=>{
         renderHierarchy();
-    }, [visData, layoutType]);
+    }, [visData, layoutType, tooltipXAttribute, tooltipYAttribute]);
 
     useEffect(()=>{
         selectedItemsRef.current = selectedItems;

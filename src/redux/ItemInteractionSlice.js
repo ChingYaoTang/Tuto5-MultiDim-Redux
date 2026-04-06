@@ -2,6 +2,7 @@ import { createSlice } from '@reduxjs/toolkit'
 
 const initialState = {
   selectedItems: [],
+  selectedItemsSource: null,
   hoveredItem: {},
   hoveredState: null
 }
@@ -11,7 +12,19 @@ export const itemInteractionSlice = createSlice({
   initialState,
   reducers: {
     setSelectedItems: (state, action) => {
-      state.selectedItems = action.payload;
+      const payload = action.payload;
+      if(Array.isArray(payload)){
+        state.selectedItems = payload;
+        state.selectedItemsSource = null;
+        return;
+      }
+      if(payload && Array.isArray(payload.items)){
+        state.selectedItems = payload.items;
+        state.selectedItemsSource = payload.source || null;
+        return;
+      }
+      state.selectedItems = [];
+      state.selectedItemsSource = payload && payload.source ? payload.source : null;
     },
     setHoveredItem: (state, action) => {
       state.hoveredItem = action.payload;

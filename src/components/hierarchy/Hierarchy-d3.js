@@ -1,5 +1,6 @@
 import * as d3 from 'd3'
-import { getStateLabelFromFips, getStateNameWithCodeFromFips } from '../../utils/usStateFips';
+import { getStateLabelFromFips, normalizeFipsStateCode } from '../../utils/usStateFips';
+import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
 class HierarchyD3 {
     margin = {top: 42, right: 6, bottom: 6, left: 6};
@@ -15,6 +16,8 @@ class HierarchyD3 {
     backgroundRect;
     colorScale;
     hierarchyTitleText;
+    tooltipXAttributeName = null;
+    tooltipYAttributeName = null;
     currentLayoutType = 'treemap';
     defaultLeafOpacity = 0.88;
     dimmedLeafOpacity = 0.08;
@@ -155,6 +158,7 @@ class HierarchyD3 {
                     stateValue: items.length>0 ? items[0].state : null,
                     stateItems: items,
                     communityCount: items.length,
+                    totalPopulation: d3.sum(children, (child)=>child.population) || 0,
                     meanViolentCrime: d3.mean(children, (child)=>child.violentCrime) || 0,
                     meanLivabilityScore: livabilityValues.length > 0
                         ? (d3.mean(livabilityValues) || 0)
@@ -233,10 +237,9 @@ class HierarchyD3 {
         const width = Math.max(0, node.x1 - node.x0);
         const height = Math.max(0, node.y1 - node.y0);
         const stateName = node.data.name;
-        const communityCount = node.data.communityCount;
 
         if(width >= 96 && height >= 13){
-            return `${stateName} (${communityCount})`;
+            return `${stateName}`;
         }
         if(width >= 62 && height >= 12){
             return `${stateName}`;
@@ -295,34 +298,53 @@ class HierarchyD3 {
     }
 
     getCommunityTooltipText(node){
+        const formatNumericValue = (value)=>{
+            const numericValue = Number(value);
+            return Number.isFinite(numericValue) ? numericValue.toFixed(3) : 'n/a';
+        };
+        const itemData = node.data.itemData || {};
         const tooltipLines = [
-            `State: ${node.parent.data.name}`,
             `Community: ${node.data.name}`,
-            `Population: ${node.data.population.toFixed(3)}`,
-            `ViolentCrimesPerPop: ${node.data.violentCrime.toFixed(3)}`,
-            `MedIncome: ${node.data.medIncome.toFixed(3)}`
+            `State: ${node.parent.data.name}`,
+            `ViolentCrimesPerPop: ${formatNumericValue(itemData.ViolentCrimesPerPop)}`,
+            `Normalized Population Index [0-1]: ${formatNumericValue(itemData.population)}`,
+            `LivabilityScore: ${formatNumericValue(itemData.livabilityScore)}`
         ];
-        if(Number.isFinite(node.data.livabilityScore)){
-            tooltipLines.push(`LivabilityScore: ${node.data.livabilityScore.toFixed(3)}`);
+
+        if(this.tooltipXAttributeName){
+            tooltipLines.push(
+                `X (${getFriendlyAttributeLabel(this.tooltipXAttributeName)}): ${formatNumericValue(itemData[this.tooltipXAttributeName])}`
+            );
+        }
+        if(this.tooltipYAttributeName){
+            tooltipLines.push(
+                `Y (${getFriendlyAttributeLabel(this.tooltipYAttributeName)}): ${formatNumericValue(itemData[this.tooltipYAttributeName])}`
+            );
         }
         return tooltipLines.join('\n');
     }
 
     getStateTooltipText(node){
+        const normalizedCode = normalizeFipsStateCode(node.data.stateValue);
+        const stateCodeText = normalizedCode !== null
+            ? String(normalizedCode).padStart(2, '0')
+            : 'n/a'
+        ;
         const tooltipLines = [
-            `State: ${getStateNameWithCodeFromFips(node.data.stateValue)}`,
+            `State: ${getStateLabelFromFips(node.data.stateValue)}`,
+            `State code (FIPS): ${stateCodeText}`,
             `Communities: ${node.data.communityCount}`,
-            `Mean ViolentCrimesPerPop: ${node.data.meanViolentCrime.toFixed(3)}`
+            `Total Normalized Population Index: ${node.data.totalPopulation.toFixed(3)}`
         ];
-        if(Number.isFinite(node.data.meanLivabilityScore)){
-            tooltipLines.push(`Mean LivabilityScore: ${node.data.meanLivabilityScore.toFixed(3)}`);
-        }
         return tooltipLines.join('\n');
     }
 
     bindCommunityEvents(selection, controllerMethods){
         selection
             .on('click', (event, node)=>{
+                if(event && typeof event.stopPropagation === 'function'){
+                    event.stopPropagation();
+                }
                 if(controllerMethods && controllerMethods.handleOnClickCommunity){
                     controllerMethods.handleOnClickCommunity(node.data.itemData);
                 }
@@ -343,6 +365,9 @@ class HierarchyD3 {
     bindStateEvents(selection, controllerMethods){
         selection
             .on('click', (event, node)=>{
+                if(event && typeof event.stopPropagation === 'function'){
+                    event.stopPropagation();
+                }
                 if(controllerMethods && controllerMethods.handleOnClickState){
                     controllerMethods.handleOnClickState(node.data);
                 }
@@ -364,11 +389,46 @@ class HierarchyD3 {
         if(!this.backgroundRect){
             return;
         }
-        this.backgroundRect.on('click', ()=>{
+        this.backgroundRect.on('click', (event)=>{
+            if(event && typeof event.stopPropagation === 'function'){
+                event.stopPropagation();
+            }
             if(controllerMethods && controllerMethods.handleOnClickBackground){
                 controllerMethods.handleOnClickBackground();
             }
         });
+    }
+
+    bindSvgBlankClick(controllerMethods){
+        if(!this.svg){
+            return;
+        }
+        this.svg.on('click.clearSelection', (event)=>{
+            if(!controllerMethods || !controllerMethods.handleOnClickBackground){
+                return;
+            }
+            const target = event && event.target ? event.target : null;
+            const clickedInteractiveNode = Boolean(
+                target
+                && typeof target.closest === 'function'
+                && target.closest('.communityNode, .stateNode, .stateLabel')
+            );
+            if(clickedInteractiveNode){
+                return;
+            }
+            controllerMethods.handleOnClickBackground();
+        });
+    }
+
+    updateNativeTitle(selection, titleAccessor){
+        if(!selection){
+            return;
+        }
+        selection.selectAll('title')
+            .data((node)=>[node])
+            .join('title')
+            .text((node)=>titleAccessor(node))
+        ;
     }
 
     renderRectBasedLayout(root, controllerMethods){
@@ -399,9 +459,7 @@ class HierarchyD3 {
             .attr('fill', 'none')
         ;
         this.bindStateEvents(stateJoin, controllerMethods);
-        stateJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateJoin, (node)=>this.getStateTooltipText(node));
         
         const stateLabelJoin = this.labelLayer
             .selectAll('.stateLabel')
@@ -431,9 +489,7 @@ class HierarchyD3 {
             .style('display', (node)=>this.getTreemapStateLabel(node) ? null : 'none')
         ;
         this.bindStateEvents(stateLabelJoin, controllerMethods);
-        stateLabelJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateLabelJoin, (node)=>this.getStateTooltipText(node));
 
         const communityJoin = this.communityLayer
             .selectAll('.communityNode')
@@ -470,9 +526,7 @@ class HierarchyD3 {
             })
         ;
 
-        communityJoin.select('title')
-            .text((node)=>this.getCommunityTooltipText(node))
-        ;
+        this.updateNativeTitle(communityJoin, (node)=>this.getCommunityTooltipText(node));
     }
 
     renderPackLayout(root, controllerMethods){
@@ -502,9 +556,7 @@ class HierarchyD3 {
             .attr('fill', 'none')
         ;
         this.bindStateEvents(stateJoin, controllerMethods);
-        stateJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateJoin, (node)=>this.getStateTooltipText(node));
         
         const stateLabelJoin = this.labelLayer
             .selectAll('.stateLabel')
@@ -527,9 +579,7 @@ class HierarchyD3 {
             .text((node)=>this.getPackStateLabel(node))
         ;
         this.bindStateEvents(stateLabelJoin, controllerMethods);
-        stateLabelJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateLabelJoin, (node)=>this.getStateTooltipText(node));
 
         const communityJoin = this.communityLayer
             .selectAll('.communityNode')
@@ -565,9 +615,7 @@ class HierarchyD3 {
             })
         ;
 
-        communityJoin.select('title')
-            .text((node)=>this.getCommunityTooltipText(node))
-        ;
+        this.updateNativeTitle(communityJoin, (node)=>this.getCommunityTooltipText(node));
     }
 
     renderTreeLayout(root, controllerMethods){
@@ -631,9 +679,7 @@ class HierarchyD3 {
             .attr('fill', 'none')
         ;
         this.bindStateEvents(stateJoin, controllerMethods);
-        stateJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateJoin, (node)=>this.getStateTooltipText(node));
 
         const stateLabelJoin = this.labelLayer
             .selectAll('.stateLabel')
@@ -649,12 +695,10 @@ class HierarchyD3 {
             )
             .attr('x', (node)=>node.y + 8)
             .attr('y', (node)=>node.x + 4)
-            .text((node)=>`${node.data.name} (${node.data.communityCount})`)
+            .text((node)=>`${node.data.name}`)
         ;
         this.bindStateEvents(stateLabelJoin, controllerMethods);
-        stateLabelJoin.select('title')
-            .text((node)=>this.getStateTooltipText(node))
-        ;
+        this.updateNativeTitle(stateLabelJoin, (node)=>this.getStateTooltipText(node));
 
         const communityJoin = this.communityLayer
             .selectAll('.communityNode')
@@ -688,9 +732,7 @@ class HierarchyD3 {
                 ;
             })
         ;
-        communityJoin.select('title')
-            .text((node)=>this.getCommunityTooltipText(node))
-        ;
+        this.updateNativeTitle(communityJoin, (node)=>this.getCommunityTooltipText(node));
     }
 
     clearLayersForLayout(){
@@ -700,16 +742,19 @@ class HierarchyD3 {
         this.labelLayer.selectAll('*').remove();
     }
 
-    renderHierarchy(visData, controllerMethods, layoutType = 'treemap'){
+    renderHierarchy(visData, controllerMethods, layoutType = 'treemap', tooltipAttributes = {}){
         if(!Array.isArray(visData) || visData.length === 0){
             return;
         }
 
         this.currentLayoutType = layoutType;
+        this.tooltipXAttributeName = tooltipAttributes.xAttributeName || null;
+        this.tooltipYAttributeName = tooltipAttributes.yAttributeName || null;
         if(this.hierarchyTitleText){
             this.hierarchyTitleText.text(this.getMergedHeaderText(layoutType));
         }
         this.bindBackgroundEvents(controllerMethods);
+        this.bindSvgBlankClick(controllerMethods);
         const renderHeight = this.getLayoutRenderHeight(layoutType, visData);
         this.setRenderableHeight(renderHeight);
 

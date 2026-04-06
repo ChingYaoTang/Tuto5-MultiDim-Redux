@@ -1,8 +1,9 @@
 import './App.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import ScatterplotContainer from './components/scatterplot/ScatterplotContainer';
 import HierarchyContainer from './components/hierarchy/HierarchyContainer';
+import DetailComparePanel from './components/detailCompare/DetailComparePanel';
 import { getDataSet } from './redux/DataSetSlice';
 import { LIVABILITY_DIMENSIONS, LIVABILITY_SCORE_FIELD } from './livability/livabilityConfig';
 import {
@@ -28,6 +29,14 @@ const getDimensionTooltipText = (dimension)=>{
     ].join('\n');
 };
 
+const CONTROL_PANEL_TOOLTIP_TEXT = [
+    'How to use this panel:',
+    '1) Give each dimension an integer score from 0 to 10.',
+    '2) Dimension weight = score / sum of all six scores.',
+    '3) Hover each dimension name to inspect its feature-level rule.',
+    '4) Updates are applied to all linked views in real time.'
+].join('\n');
+
 // Scatter dropdown order:
 // [dimension score] -> [that dimension's selected features], repeated by dimension.
 // Excludes the overall livability score.
@@ -39,10 +48,12 @@ const SCATTER_ATTRIBUTE_OPTIONS = Array.from(
         ])
     )
 ).filter((fieldName)=>fieldName !== LIVABILITY_SCORE_FIELD);
+const DEFAULT_SCATTER_X_ATTRIBUTE = 'medIncome';
+const DEFAULT_SCATTER_Y_ATTRIBUTE = 'ViolentCrimesPerPop';
 
 const getDefaultDimensionRatings = ()=>{
     return LIVABILITY_DIMENSIONS.reduce((accumulator, dimension)=>{
-        accumulator[dimension.id] = Number((dimension.defaultWeight * 10).toFixed(1));
+        accumulator[dimension.id] = Math.round(dimension.defaultWeight * 10);
         return accumulator;
     }, {});
 };
@@ -52,18 +63,21 @@ const toClampedRating = (value)=>{
     if(!Number.isFinite(numericValue)){
         return 0;
     }
-    return Math.max(0, Math.min(10, numericValue));
+    return Math.max(0, Math.min(10, Math.round(numericValue)));
 };
 
 // a component is a piece of code which render a part of the user interface
 function App() {
     const dataSet = useSelector((state)=>state.dataSet);
+    const selectedItems = useSelector((state)=>state.itemInteraction.selectedItems);
     const dataSetSize = dataSet.length;
     const dispatch = useDispatch();
 
     const [dimensionRatings, setDimensionRatings] = useState(
         ()=>getDefaultDimensionRatings()
     );
+    const [selectedScatterXAttribute, setSelectedScatterXAttribute] = useState(DEFAULT_SCATTER_X_ATTRIBUTE);
+    const [selectedScatterYAttribute, setSelectedScatterYAttribute] = useState(DEFAULT_SCATTER_Y_ATTRIBUTE);
 
     const normalizedDimensionWeights = useMemo(()=>{
         const totalRating = Object.values(dimensionRatings)
@@ -107,12 +121,35 @@ function App() {
         }));
     };
 
+    const handleScatterAxisSelectionChange = useCallback((nextSelection = {})=>{
+        const nextXAttribute = nextSelection.xAttributeName;
+        const nextYAttribute = nextSelection.yAttributeName;
+
+        if(typeof nextXAttribute === 'string' && nextXAttribute.length > 0){
+            setSelectedScatterXAttribute((previousValue)=>(
+                previousValue === nextXAttribute ? previousValue : nextXAttribute
+            ));
+        }
+        if(typeof nextYAttribute === 'string' && nextYAttribute.length > 0){
+            setSelectedScatterYAttribute((previousValue)=>(
+                previousValue === nextYAttribute ? previousValue : nextYAttribute
+            ));
+        }
+    }, []);
+
     return (
         <div className="App">
             <section className="livabilityControlPanel">
                 <div className="livabilityControlHeader">
-                    <div>
+                    <div className="livabilityControlTitleRow">
                         <h2 className="livabilityControlTitle">Livability Control Panel</h2>
+                        <span
+                            className="panelInfoBadge"
+                            title={CONTROL_PANEL_TOOLTIP_TEXT}
+                            aria-label="How to use the livability control panel"
+                        >
+                            i
+                        </span>
                     </div>
                 </div>
                 <div className="livabilityControlGrid">
@@ -137,7 +174,7 @@ function App() {
                                         type="number"
                                         min="0"
                                         max="10"
-                                        step="0.1"
+                                        step="1"
                                         value={rawInputValue}
                                         onChange={(event)=>handleDimensionRatingChange(dimension.id, event.target.value)}
                                         className="dimensionWeightNumberInput"
@@ -154,15 +191,28 @@ function App() {
             <div id={'MultiviewContainer'} className={'row'}>
                 <ScatterplotContainer
                     visDataOverride={visDataWithLivability}
-                    xAttributeName={'medIncome'}
-                    yAttributeName={'ViolentCrimesPerPop'}
+                    xAttributeName={selectedScatterXAttribute}
+                    yAttributeName={selectedScatterYAttribute}
                     colorAttributeName={LIVABILITY_SCORE_FIELD}
                     xAttributeOptions={SCATTER_ATTRIBUTE_OPTIONS}
                     yAttributeOptions={SCATTER_ATTRIBUTE_OPTIONS}
                     title={'Community Indicator Relationship Explorer'}
+                    onAxisSelectionChange={handleScatterAxisSelectionChange}
                 />
-                <HierarchyContainer visDataOverride={visDataWithLivability} />
+                <HierarchyContainer
+                    visDataOverride={visDataWithLivability}
+                    tooltipXAttribute={selectedScatterXAttribute}
+                    tooltipYAttribute={selectedScatterYAttribute}
+                />
             </div>
+
+            <DetailComparePanel
+                visData={visDataWithLivability}
+                selectedItems={selectedItems}
+                xAttributeName={selectedScatterXAttribute}
+                yAttributeName={selectedScatterYAttribute}
+                colorAttributeName={LIVABILITY_SCORE_FIELD}
+            />
         </div>
     );
 }

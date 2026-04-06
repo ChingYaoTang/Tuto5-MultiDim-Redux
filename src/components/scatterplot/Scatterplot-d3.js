@@ -1,11 +1,12 @@
 import * as d3 from 'd3'
 // import { getDefaultFontSize } from '../../utils/helper';
-import { getStateNameWithCodeFromFips } from '../../utils/usStateFips';
+import { getStateLabelFromFips } from '../../utils/usStateFips';
+import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
 let scatterplotIdCounter = 0;
 
 class ScatterplotD3 {
-    margin = {top: 104, right: 130, bottom: 70, left: 82};
+    margin = {top: 84, right: 130, bottom: 52, left: 82};
     size;
     height;
     width;
@@ -14,6 +15,7 @@ class ScatterplotD3 {
     brushG;
     brushBehavior;
     brushRafId = null;
+    isProgrammaticBrushClear = false;
     pendingBrushSelection = null;
     lastBrushedIndexes = [];
     lastBrushDispatchMs = 0;
@@ -35,11 +37,16 @@ class ScatterplotD3 {
     colorLegendWidth = 14;
     colorInterpolator = (value)=>{
         // low value -> red, high value -> blue
-        const trimmedValue = 0.08 + (0.84 * value);
+        const clampedValue = Math.max(0, Math.min(1, Number(value)));
+        // Boost saturation around the middle so points are less washed out.
+        const centeredValue = (clampedValue - 0.5) * 2;
+        const boostedValue = Math.sign(centeredValue) * Math.pow(Math.abs(centeredValue), 0.78);
+        const remappedValue = 0.5 + (boostedValue / 2);
+        const trimmedValue = 0.1 + (0.8 * remappedValue);
         return d3.interpolateRdBu(trimmedValue);
     };
     // add specific class properties used for the vis render/updates
-    defaultOpacity=0.5;
+    defaultOpacity=0.78;
     transitionDuration=160;
     transitionEase=d3.easeCubicOut;
     circleRadius = 3;
@@ -122,19 +129,19 @@ class ScatterplotD3 {
         this.chartTitleText = this.svg.append("text")
             .attr("class","scatterplotTitle")
             .attr("x", 0)
-            .attr("y", -68)
+            .attr("y", -54)
             .text("Scatterplot")
         ;
         this.chartSubtitleText = this.svg.append("text")
             .attr("class","scatterplotSubtitle")
             .attr("x", 0)
-            .attr("y", -46)
+            .attr("y", -34)
             .text("X vs Y (Color: attribute)")
         ;
         this.xAxisLabelText = this.svg.append("text")
             .attr("class","scatterplotXAxisLabel")
             .attr("x", this.width / 2)
-            .attr("y", this.height + 46)
+            .attr("y", this.height + 34)
             .attr("text-anchor","middle")
             .text("X Axis")
         ;
@@ -224,26 +231,30 @@ class ScatterplotD3 {
         });
     }
 
-    getItemTooltipText = function(itemData){
-        const safeNumber = (value)=>{
+    getItemTooltipText = function(itemData, xAttributeName, yAttributeName){
+        const formatNumericValue = (value)=>{
             const numericValue = Number(value);
             return Number.isFinite(numericValue) ? numericValue.toFixed(3) : "n/a";
         };
-        const populationIndex = Number(itemData.population);
-        const populationPercent = Number.isFinite(populationIndex)
-            ? `${(populationIndex * 100).toFixed(1)}% of dataset max`
-            : "n/a"
-        ;
         const tooltipLines = [
-            `State: ${getStateNameWithCodeFromFips(itemData.state)}`,
             `Community: ${itemData.communityname}`,
-            `ViolentCrimesPerPop: ${safeNumber(itemData.ViolentCrimesPerPop)}`,
-            `Population index: ${safeNumber(itemData.population)} (${populationPercent})`
+            `State: ${getStateLabelFromFips(itemData.state)}`,
+            `ViolentCrimesPerPop: ${formatNumericValue(itemData.ViolentCrimesPerPop)}`,
+            `Normalized Population Index [0-1]: ${formatNumericValue(itemData.population)}`,
+            `LivabilityScore: ${formatNumericValue(itemData.livabilityScore)}`
         ];
-        const livabilityScore = Number(itemData.livabilityScore);
-        if(Number.isFinite(livabilityScore)){
-            tooltipLines.push(`LivabilityScore: ${safeNumber(livabilityScore)}`);
+
+        if(xAttributeName){
+            tooltipLines.push(
+                `X (${getFriendlyAttributeLabel(xAttributeName)}): ${formatNumericValue(itemData[xAttributeName])}`
+            );
         }
+        if(yAttributeName){
+            tooltipLines.push(
+                `Y (${getFriendlyAttributeLabel(yAttributeName)}): ${formatNumericValue(itemData[yAttributeName])}`
+            );
+        }
+
         return tooltipLines.join("\n");
     }
 
@@ -287,7 +298,7 @@ class ScatterplotD3 {
                     }
                     return this.colorScale(colorValue);
                 })
-                .attr("fill-opacity", 0.82)
+                .attr("fill-opacity", 0.95)
             ;
         }
     }
@@ -298,12 +309,14 @@ class ScatterplotD3 {
             return;
         }
         const markerSelection = d3.select(markerNode);
+        const markerCircleSelection = markerSelection.select(".markerCircle");
+        markerCircleSelection.interrupt();
         if(level === "selected"){
             markerSelection
                 .raise()
                 .style("opacity", 1)
             ;
-            markerSelection.select(".markerCircle")
+            markerCircleSelection
                 .attr("r", this.selectedCircleRadius)
                 .attr("stroke", this.selectedStrokeColor)
                 .attr("stroke-width", this.selectedStrokeWidth)
@@ -312,7 +325,7 @@ class ScatterplotD3 {
         }
         if(level === "related"){
             markerSelection.style("opacity", this.relatedOpacity);
-            markerSelection.select(".markerCircle")
+            markerCircleSelection
                 .attr("r", this.relatedCircleRadius)
                 .attr("stroke", this.relatedStrokeColor)
                 .attr("stroke-width", this.relatedStrokeWidth)
@@ -321,7 +334,7 @@ class ScatterplotD3 {
         }
         if(level === "filtered"){
             markerSelection.style("opacity", this.filteredOpacity);
-            markerSelection.select(".markerCircle")
+            markerCircleSelection
                 .attr("r", this.circleRadius)
                 .attr("stroke", this.markerStrokeColor)
                 .attr("stroke-width", this.markerStrokeWidth)
@@ -330,7 +343,7 @@ class ScatterplotD3 {
         }
 
         markerSelection.style("opacity", this.defaultOpacity);
-        markerSelection.select(".markerCircle")
+        markerCircleSelection
             .attr("r", this.circleRadius)
             .attr("stroke", this.markerStrokeColor)
             .attr("stroke-width", this.markerStrokeWidth)
@@ -423,6 +436,7 @@ class ScatterplotD3 {
             return;
         }
         hoveredMarkerSelection.select(".markerCircle")
+            .interrupt()
             .transition().duration(this.transitionDuration).ease(this.transitionEase)
             .attr("stroke", this.hoveredStrokeColor)
             .attr("stroke-width", this.hoveredStrokeWidth)
@@ -630,7 +644,7 @@ class ScatterplotD3 {
             return;
         }
 
-        if(this.areIndexArraysEqual(this.lastBrushedIndexes, selectedIndexes)){
+        if(!forceDispatch && this.areIndexArraysEqual(this.lastBrushedIndexes, selectedIndexes)){
             return;
         }
 
@@ -660,6 +674,13 @@ class ScatterplotD3 {
         }
 
         const handleBrush = (event)=>{
+            if(this.isProgrammaticBrushClear){
+                if(event.type === "end"){
+                    this.isProgrammaticBrushClear = false;
+                }
+                return;
+            }
+
             if(event.type === "end"){
                 if(this.brushRafId !== null){
                     window.cancelAnimationFrame(this.brushRafId);
@@ -703,6 +724,21 @@ class ScatterplotD3 {
             // (If brush overlay is on top, it intercepts most point interactions.)
             .lower()
         ;
+    }
+
+    clearBrushSelection = function(){
+        if(!this.brushG || !this.brushBehavior){
+            return;
+        }
+        if(this.brushRafId !== null){
+            window.cancelAnimationFrame(this.brushRafId);
+            this.brushRafId = null;
+        }
+        this.pendingBrushSelection = null;
+        this.isProgrammaticBrushClear = true;
+        this.lastBrushedIndexes = [];
+        this.lastBrushDispatchMs = 0;
+        this.brushG.call(this.brushBehavior.move, null);
     }
 
     renderScatterplot = function (
@@ -767,7 +803,7 @@ class ScatterplotD3 {
                     ;
                     itemG.append("title");
                     itemG.select("title")
-                        .text((itemData)=>this.getItemTooltipText(itemData))
+                        .text((itemData)=>this.getItemTooltipText(itemData, xAttribute, yAttribute))
                     ;
                     this.updateMarkers(itemG,xAttribute,yAttribute,colorAttribute, true);
                 },
@@ -775,6 +811,9 @@ class ScatterplotD3 {
                     update.each((itemData, itemIndex, nodes)=>{
                         this.markerGroupByIndex.set(itemData.index, nodes[itemIndex]);
                     });
+                    update.select("title")
+                        .text((itemData)=>this.getItemTooltipText(itemData, xAttribute, yAttribute))
+                    ;
                     this.updateMarkers(update,xAttribute,yAttribute,colorAttribute, needsColorUpdate)
                 },
                 exit =>{
@@ -787,6 +826,33 @@ class ScatterplotD3 {
 
             )
 
+        this.svg
+            .on("mousemove.hoverclear", (event)=>{
+                const target = event && event.target ? event.target : null;
+                const isMarkerTarget = Boolean(
+                    target
+                    && typeof target.closest === "function"
+                    && target.closest(".markerG")
+                );
+                if(!isMarkerTarget && this.lastHoveredIndex !== null){
+                    this.resetMarkerToBaseStyle(this.lastHoveredIndex);
+                    this.lastHoveredIndex = null;
+                    if(this.controllerMethods && this.controllerMethods.handleOnMouseLeave){
+                        this.controllerMethods.handleOnMouseLeave();
+                    }
+                }
+            })
+            .on("mouseleave.hoverclear", ()=>{
+                if(this.lastHoveredIndex !== null){
+                    this.resetMarkerToBaseStyle(this.lastHoveredIndex);
+                    this.lastHoveredIndex = null;
+                }
+                if(this.controllerMethods && this.controllerMethods.handleOnMouseLeave){
+                    this.controllerMethods.handleOnMouseLeave();
+                }
+            })
+        ;
+
         this.bindBrushInteraction(visData, xAttribute, yAttribute, controllerMethods);
         this.lastVisDataRef = visData;
     }
@@ -797,6 +863,7 @@ class ScatterplotD3 {
             this.brushRafId = null;
         }
         this.pendingBrushSelection = null;
+        this.isProgrammaticBrushClear = false;
         this.lastBrushedIndexes = [];
         this.lastBrushDispatchMs = 0;
         this.itemPixelCache = [];
