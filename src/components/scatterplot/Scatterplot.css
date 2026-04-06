@@ -1,3 +1,135 @@
-.scatterplotDivContainer{
+.scatterplotPanel{
     height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex-grow: 0.95;
+    background: #ffffff;
+    border: 1px solid #d7dee8;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    padding: 6px 8px 8px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.scatterplotToolbar{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 4px 3px 4px;
+    flex-wrap: wrap;
+}
+
+.scatterplotToolbarLabel{
+    font-size: 13px;
+    color: #374151;
+    font-weight: 600;
+}
+
+.scatterplotToolbarSelect{
+    font-size: 13px;
+    border: 1px solid #9ca3af;
+    border-radius: 6px;
+    background: #f9fafb;
+    color: #1f2937;
+    padding: 5px 10px;
+}
+
+.scatterplotHoverTooltip{
+    margin: 0 4px 3px 4px;
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #334155;
+    min-height: 20px;
+    text-align: left;
+}
+
+.scatterplotDivContainer{
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.scatterplotDivContainer .scatterplotTitle{
+    font-size: 19px;
+    font-weight: 700;
+    fill: #0f172a;
+}
+
+.scatterplotDivContainer .scatterplotSubtitle{
+    font-size: 13px;
+    fill: #475569;
+}
+
+.scatterplotDivContainer .scatterplotXAxisLabel,
+.scatterplotDivContainer .scatterplotYAxisLabel{
+    font-size: 13px;
+    font-weight: 600;
+    fill: #334155;
+}
+
+.scatterplotDivContainer .scatterplotColorLegendTitle{
+    font-size: 12px;
+    fill: #334155;
+    font-weight: 600;
+}
+
+.scatterplotDivContainer .scatterplotColorLegendNote{
+    font-size: 10px;
+    fill: #64748b;
+}
+
+.scatterplotDivContainer .scatterplotColorLegendAxis text{
+    font-size: 11px;
+    fill: #4b5563;
+}
+
+.scatterplotDivContainer .scatterplotColorLegendAxis path,
+.scatterplotDivContainer .scatterplotColorLegendAxis line{
+    stroke: #6b7280;
+}
+
+.scatterplotDivContainer .xAxisG path,
+.scatterplotDivContainer .yAxisG path,
+.scatterplotDivContainer .xAxisG line,
+.scatterplotDivContainer .yAxisG line{
+    stroke: #94a3b8;
+}
+
+.scatterplotDivContainer .xAxisG text,
+.scatterplotDivContainer .yAxisG text{
+    fill: #475569;
+    font-size: 12px;
+}
+
+.scatterplotDivContainer .xGridG line,
+.scatterplotDivContainer .yGridG line{
+    stroke: #e2e8f0;
+    stroke-width: 1px;
+    shape-rendering: crispEdges;
+}
+
+.scatterplotDivContainer .xGridG path,
+.scatterplotDivContainer .yGridG path{
+    stroke: none;
+}
+
+.scatterplotDivContainer .brushG .overlay{
+    cursor: crosshair;
+}
+
+.scatterplotDivContainer .brushG .selection{
+    fill: #2a9d8f33;
+    stroke: #2a9d8f;
+    stroke-width: 1px;
+}
+
+.scatterplotDivContainer .markerCircle{
+    vector-effect: non-scaling-stroke;
+    shape-rendering: geometricPrecision;
 }

@@ -1,20 +1,27 @@
 .App {
     text-align: center;
     height: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 #MultiviewContainer{
     height: 100%;
+    min-height: 0;
 }
 .row {
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 12px;
+    min-height: 0;
+    overflow: hidden;
 }
 .col{
     flex-grow: 1; /* all .col elements have the same importance */
     flex-basis: 0; /* do not use auto to avoid size depends on content*/
+    min-height: 0;
 }
 
 /* .row:after {

@@ -1,0 +1,105 @@
+.hierarchyPanel{
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex-grow: 1.05;
+    background: #ffffff;
+    border: 1px solid #d7dee8;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    padding: 6px 8px 8px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.hierarchyToolbar{
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 5px 4px 3px 4px;
+    flex-wrap: wrap;
+}
+
+.hierarchyToolbar .layoutButton{
+    border: 1px solid #9ca3af;
+    background: #f9fafb;
+    color: #1f2937;
+    border-radius: 6px;
+    font-size: 13px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.hierarchyToolbar .layoutButton.active{
+    border-color: #1d3557;
+    background: #dbeafe;
+    font-weight: 600;
+}
+
+.hierarchyHoverTooltip{
+    margin: 0 4px 3px 4px;
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #334155;
+    min-height: 20px;
+    text-align: left;
+}
+
+.hierarchyDivContainer{
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.hierarchyDivContainer .hierarchyTitle{
+    font-size: 15px;
+    font-weight: 600;
+    fill: #1f2937;
+}
+
+.hierarchyDivContainer .hierarchyLegend{
+    font-size: 12px;
+    fill: #374151;
+}
+
+.hierarchyDivContainer .hierarchyLayoutInfo{
+    font-size: 11px;
+    fill: #4b5563;
+}
+
+.hierarchyDivContainer .communityNode{
+    cursor: pointer;
+}
+
+.hierarchyDivContainer .communityShape{
+    stroke: #ffffff;
+    stroke-width: 0.4px;
+}
+
+.hierarchyDivContainer .treeLink{
+    fill: none;
+    stroke: #94a3b8;
+    stroke-width: 0.8px;
+    stroke-opacity: 0.4;
+    pointer-events: none;
+}
+
+.hierarchyDivContainer .stateShape{
+    fill: none;
+    stroke: #264653;
+    stroke-width: 1.2px;
+    pointer-events: none;
+}
+
+.hierarchyDivContainer .stateLabel{
+    font-size: 10px;
+    fill: #111827;
+    pointer-events: all;
+    cursor: pointer;
+}
