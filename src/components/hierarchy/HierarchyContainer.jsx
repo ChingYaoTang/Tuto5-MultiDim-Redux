@@ -4,7 +4,6 @@ import { useDispatch, useSelector } from 'react-redux'
 
 import HierarchyD3 from './Hierarchy-d3';
 import { setHoveredItem, setHoveredState, setSelectedItems } from '../../redux/ItemInteractionSlice';
-import { getStateLabelFromFips } from '../../utils/usStateFips';
 
 const LAYOUT_OPTIONS = [
     {id: 'treemap', label: 'Treemap'},
@@ -37,8 +36,9 @@ const hasSameSelectionByIndex = (leftItems = [], rightItems = [])=>{
     return true;
 };
 
-function HierarchyContainer(){
-    const visData = useSelector((state)=>state.dataSet);
+function HierarchyContainer({visDataOverride}){
+    const dataSetFromStore = useSelector((state)=>state.dataSet);
+    const visData = visDataOverride || dataSetFromStore;
     const selectedItems = useSelector((state)=>state.itemInteraction.selectedItems);
     const hoveredItem = useSelector((state)=>state.itemInteraction.hoveredItem);
     const hoveredState = useSelector((state)=>state.itemInteraction.hoveredState);
@@ -150,13 +150,6 @@ function HierarchyContainer(){
         applyHighlights();
     }, [selectedItems, hoveredItem, hoveredState]);
 
-    const hoverSummaryText = hoveredItem && hoveredItem.index !== undefined && hoveredItem.index !== null
-        ? `Hover: ${getStateLabelFromFips(hoveredItem.state)} / ${hoveredItem.communityname}`
-        : (hoveredState !== null && hoveredState !== undefined
-            ? `Hover state: ${getStateLabelFromFips(hoveredState)}`
-            : "Hover a hierarchy node or scatter point to inspect details")
-    ;
-
     return(
         <div className="hierarchyPanel col">
             <div className="hierarchyToolbar">
@@ -174,9 +167,6 @@ function HierarchyContainer(){
                         </button>
                     );
                 })}
-            </div>
-            <div className="hierarchyHoverTooltip">
-                {hoverSummaryText}
             </div>
             <div ref={divContainerRef} className="hierarchyDivContainer">
 

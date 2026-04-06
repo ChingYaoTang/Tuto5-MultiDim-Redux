@@ -2,7 +2,7 @@ import * as d3 from 'd3'
 import { getStateLabelFromFips, getStateNameWithCodeFromFips } from '../../utils/usStateFips';
 
 class HierarchyD3 {
-    margin = {top: 64, right: 8, bottom: 6, left: 8};
+    margin = {top: 42, right: 6, bottom: 6, left: 6};
     size;
     width;
     height;
@@ -14,15 +14,22 @@ class HierarchyD3 {
     linkLayer;
     backgroundRect;
     colorScale;
-    layoutInfoText;
+    hierarchyTitleText;
     currentLayoutType = 'treemap';
-    defaultLeafOpacity = 0.85;
-    dimmedLeafOpacity = 0.12;
+    defaultLeafOpacity = 0.88;
+    dimmedLeafOpacity = 0.08;
+    relatedLeafOpacity = 0.54;
     transitionDuration = 160;
     transitionEase = d3.easeCubicOut;
     selectedCommunityIndexSet = new Set();
     selectedStateSet = new Set();
     currentRenderHeight = 0;
+    selectedStrokeColor = '#000000';
+    hoverStrokeColor = '#000000';
+    relatedStrokeColor = '#64748b';
+    selectedStrokeWidth = 4.6;
+    hoverStrokeWidth = 3.8;
+    relatedStrokeWidth = 1.9;
 
     constructor(el){
         this.el = el;
@@ -44,28 +51,17 @@ class HierarchyD3 {
             .attr('transform', `translate(${this.margin.left},${this.margin.top})`)
         ;
 
-        this.svg.append('text')
+        this.hierarchyTitleText = this.svg.append('text')
             .attr('class', 'hierarchyTitle')
             .attr('x', 0)
-            .attr('y', -40)
-            .text('Hierarchy: state -> communityname')
+            .attr('y', -14)
+            .text(this.getMergedHeaderText(this.currentLayoutType))
         ;
 
-        this.svg.append('text')
-            .attr('class', 'hierarchyLegend')
-            .attr('x', 0)
-            .attr('y', -22)
-            .text('Area/Radius = population | Color = ViolentCrimesPerPop')
-        ;
-
-        this.layoutInfoText = this.svg.append('text')
-            .attr('class', 'hierarchyLayoutInfo')
-            .attr('x', 0)
-            .attr('y', -6)
-            .text('Layout: treemap')
-        ;
-
-        this.colorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
+        this.colorScale = d3.scaleSequential((value)=>{
+            const trimmedValue = 0.08 + (0.84 * value);
+            return d3.interpolateRdBu(trimmedValue);
+        }).clamp(true);
         this.backgroundRect = this.svg.append('rect')
             .attr('class', 'hierarchyBackground')
             .attr('x', 0)
@@ -79,6 +75,18 @@ class HierarchyD3 {
         this.communityLayer = this.svg.append('g').attr('class', 'communityLayer');
         this.stateLayer = this.svg.append('g').attr('class', 'stateLayer');
         this.labelLayer = this.svg.append('g').attr('class', 'stateLabelLayer');
+    }
+
+    getLegendTextByLayout(layoutType){
+        const sizeEncodingText = layoutType === 'treemap'
+            ? 'Tile area = population'
+            : 'Node radius = population'
+        ;
+        return `${sizeEncodingText} | Color = livability score (red low -> blue high)`;
+    }
+
+    getMergedHeaderText(layoutType){
+        return `State and Community Livability | ${this.getLegendTextByLayout(layoutType)}`;
     }
 
     getNumericValue(value, fallback = 0){
@@ -99,12 +107,12 @@ class HierarchyD3 {
     }
 
     updateColorDomain(visData){
-        const crimeValues = visData
-            .map((item)=>this.getNumericValue(item.ViolentCrimesPerPop, NaN))
+        const livabilityValues = visData
+            .map((item)=>this.getNumericValue(item.livabilityScore, NaN))
             .filter((value)=>Number.isFinite(value))
         ;
-        let minValue = crimeValues.length > 0 ? d3.min(crimeValues) : 0;
-        let maxValue = crimeValues.length > 0 ? d3.max(crimeValues) : 1;
+        let minValue = livabilityValues.length > 0 ? d3.min(livabilityValues) : 0;
+        let maxValue = livabilityValues.length > 0 ? d3.max(livabilityValues) : 1;
 
         if(minValue === maxValue){
             minValue = minValue - 0.01;
@@ -123,6 +131,7 @@ class HierarchyD3 {
                 const children = items.map((itemData)=>{
                     const population = this.getNumericValue(itemData.population, 0);
                     const violentCrime = this.getNumericValue(itemData.ViolentCrimesPerPop, 0);
+                    const livabilityScore = this.getNumericValue(itemData.livabilityScore, NaN);
                     return {
                         name: this.getCommunityLabel(itemData),
                         nodeType: 'community',
@@ -131,9 +140,14 @@ class HierarchyD3 {
                         population: population,
                         violentCrime: violentCrime,
                         medIncome: this.getNumericValue(itemData.medIncome, 0),
+                        livabilityScore: livabilityScore,
                         itemData: itemData
                     };
                 });
+                const livabilityValues = children
+                    .map((child)=>child.livabilityScore)
+                    .filter((value)=>Number.isFinite(value))
+                ;
 
                 return {
                     name: stateName,
@@ -142,6 +156,9 @@ class HierarchyD3 {
                     stateItems: items,
                     communityCount: items.length,
                     meanViolentCrime: d3.mean(children, (child)=>child.violentCrime) || 0,
+                    meanLivabilityScore: livabilityValues.length > 0
+                        ? (d3.mean(livabilityValues) || 0)
+                        : null,
                     children: children
                 };
             })
@@ -278,11 +295,29 @@ class HierarchyD3 {
     }
 
     getCommunityTooltipText(node){
-        return `State: ${node.parent.data.name}\nCommunity: ${node.data.name}\nPopulation: ${node.data.population.toFixed(3)}\nViolentCrimesPerPop: ${node.data.violentCrime.toFixed(3)}\nMedIncome: ${node.data.medIncome.toFixed(3)}`;
+        const tooltipLines = [
+            `State: ${node.parent.data.name}`,
+            `Community: ${node.data.name}`,
+            `Population: ${node.data.population.toFixed(3)}`,
+            `ViolentCrimesPerPop: ${node.data.violentCrime.toFixed(3)}`,
+            `MedIncome: ${node.data.medIncome.toFixed(3)}`
+        ];
+        if(Number.isFinite(node.data.livabilityScore)){
+            tooltipLines.push(`LivabilityScore: ${node.data.livabilityScore.toFixed(3)}`);
+        }
+        return tooltipLines.join('\n');
     }
 
     getStateTooltipText(node){
-        return `State: ${getStateNameWithCodeFromFips(node.data.stateValue)}\nCommunities: ${node.data.communityCount}\nMean ViolentCrimesPerPop: ${node.data.meanViolentCrime.toFixed(3)}`;
+        const tooltipLines = [
+            `State: ${getStateNameWithCodeFromFips(node.data.stateValue)}`,
+            `Communities: ${node.data.communityCount}`,
+            `Mean ViolentCrimesPerPop: ${node.data.meanViolentCrime.toFixed(3)}`
+        ];
+        if(Number.isFinite(node.data.meanLivabilityScore)){
+            tooltipLines.push(`Mean LivabilityScore: ${node.data.meanLivabilityScore.toFixed(3)}`);
+        }
+        return tooltipLines.join('\n');
     }
 
     bindCommunityEvents(selection, controllerMethods){
@@ -426,7 +461,13 @@ class HierarchyD3 {
             .attr('y', (node)=>node.y0)
             .attr('width', (node)=>Math.max(0, node.x1 - node.x0))
             .attr('height', (node)=>Math.max(0, node.y1 - node.y0))
-            .attr('fill', (node)=>this.colorScale(node.data.violentCrime))
+            .attr('fill', (node)=>{
+                const livabilityValue = this.getNumericValue(node.data.livabilityScore, NaN);
+                return Number.isFinite(livabilityValue)
+                    ? this.colorScale(livabilityValue)
+                    : '#94a3b8'
+                ;
+            })
         ;
 
         communityJoin.select('title')
@@ -515,7 +556,13 @@ class HierarchyD3 {
             .attr('cx', (node)=>node.x)
             .attr('cy', (node)=>node.y)
             .attr('r', (node)=>Math.max(0, node.r))
-            .attr('fill', (node)=>this.colorScale(node.data.violentCrime))
+            .attr('fill', (node)=>{
+                const livabilityValue = this.getNumericValue(node.data.livabilityScore, NaN);
+                return Number.isFinite(livabilityValue)
+                    ? this.colorScale(livabilityValue)
+                    : '#94a3b8'
+                ;
+            })
         ;
 
         communityJoin.select('title')
@@ -633,7 +680,13 @@ class HierarchyD3 {
             .attr('cx', (node)=>node.y)
             .attr('cy', (node)=>node.x)
             .attr('r', (node)=>communityRadiusScale(this.getNumericValue(node.data.population, 0)))
-            .attr('fill', (node)=>this.colorScale(node.data.violentCrime))
+            .attr('fill', (node)=>{
+                const livabilityValue = this.getNumericValue(node.data.livabilityScore, NaN);
+                return Number.isFinite(livabilityValue)
+                    ? this.colorScale(livabilityValue)
+                    : '#94a3b8'
+                ;
+            })
         ;
         communityJoin.select('title')
             .text((node)=>this.getCommunityTooltipText(node))
@@ -653,7 +706,9 @@ class HierarchyD3 {
         }
 
         this.currentLayoutType = layoutType;
-        this.layoutInfoText.text(`Layout: ${layoutType}`);
+        if(this.hierarchyTitleText){
+            this.hierarchyTitleText.text(this.getMergedHeaderText(layoutType));
+        }
         this.bindBackgroundEvents(controllerMethods);
         const renderHeight = this.getLayoutRenderHeight(layoutType, visData);
         this.setRenderableHeight(renderHeight);
@@ -689,6 +744,7 @@ class HierarchyD3 {
 
         const communityNodeSelection = this.communityLayer.selectAll('.communityNode');
         const stateNodeSelection = this.stateLayer.selectAll('.stateNode');
+        const stateLabelSelection = this.labelLayer.selectAll('.stateLabel');
         this.selectedCommunityIndexSet = selectedIndexSet;
         this.selectedStateSet = selectedStateSet;
 
@@ -697,26 +753,88 @@ class HierarchyD3 {
             communityNodeSelection.select('.communityShape')
                 .attr('stroke', '#ffffff')
                 .attr('stroke-width', 0.5)
+                .attr('stroke-opacity', 1)
             ;
             stateNodeSelection.select('.stateShape')
                 .attr('stroke', '#264653')
                 .attr('stroke-width', 1.2)
+                .attr('stroke-opacity', 1)
                 .attr('stroke-dasharray', null)
+            ;
+            stateLabelSelection
+                .style('opacity', 1)
+                .style('font-weight', 500)
+                .attr('fill', '#111827')
             ;
             return;
         }
 
         communityNodeSelection
-            .style('opacity', (node)=>selectedIndexSet.has(node.data.itemData.index) ? 1 : this.dimmedLeafOpacity)
+            .style('opacity', (node)=>{
+                if(selectedIndexSet.has(node.data.itemData.index)){
+                    return 1;
+                }
+                const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
+                if(parentStateName && selectedStateSet.has(parentStateName)){
+                    return this.relatedLeafOpacity;
+                }
+                return this.dimmedLeafOpacity;
+            })
         ;
         communityNodeSelection.select('.communityShape')
-            .attr('stroke', (node)=>selectedIndexSet.has(node.data.itemData.index) ? '#7c2d12' : '#ffffff')
-            .attr('stroke-width', (node)=>selectedIndexSet.has(node.data.itemData.index) ? 2.8 : 0.5)
+            .attr('stroke', (node)=>{
+                if(selectedIndexSet.has(node.data.itemData.index)){
+                    return this.selectedStrokeColor;
+                }
+                const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
+                if(parentStateName && selectedStateSet.has(parentStateName)){
+                    return this.relatedStrokeColor;
+                }
+                return '#ffffff';
+            })
+            .attr('stroke-width', (node)=>{
+                if(selectedIndexSet.has(node.data.itemData.index)){
+                    return this.selectedStrokeWidth;
+                }
+                const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
+                if(parentStateName && selectedStateSet.has(parentStateName)){
+                    return this.relatedStrokeWidth;
+                }
+                return 0.5;
+            })
+            .attr('stroke-opacity', (node)=>{
+                if(selectedIndexSet.has(node.data.itemData.index)){
+                    return 1;
+                }
+                const parentStateName = node.parent && node.parent.data ? node.parent.data.name : null;
+                if(parentStateName && selectedStateSet.has(parentStateName)){
+                    return 0.95;
+                }
+                return 1;
+            })
         ;
         stateNodeSelection.select('.stateShape')
-            .attr('stroke', (node)=>selectedStateSet.has(node.data.name) ? '#7c2d12' : '#264653')
-            .attr('stroke-width', (node)=>selectedStateSet.has(node.data.name) ? 2.8 : 1.2)
+            .attr('stroke', (node)=>selectedStateSet.has(node.data.name) ? this.selectedStrokeColor : '#264653')
+            .attr('stroke-width', (node)=>selectedStateSet.has(node.data.name) ? this.selectedStrokeWidth : 1.2)
+            .attr('stroke-opacity', (node)=>selectedStateSet.has(node.data.name) ? 1 : 0.4)
             .attr('stroke-dasharray', null)
+        ;
+        stateLabelSelection
+            .style('opacity', (node)=>selectedStateSet.has(node.data.name) ? 1 : 0.45)
+            .style('font-weight', (node)=>selectedStateSet.has(node.data.name) ? 700 : 500)
+            .attr('fill', (node)=>selectedStateSet.has(node.data.name) ? '#0f172a' : '#64748b')
+        ;
+        communityNodeSelection
+            .filter((node)=>selectedIndexSet.has(node.data.itemData.index))
+            .raise()
+        ;
+        stateNodeSelection
+            .filter((node)=>selectedStateSet.has(node.data.name))
+            .raise()
+        ;
+        stateLabelSelection
+            .filter((node)=>selectedStateSet.has(node.data.name))
+            .raise()
         ;
     }
 
@@ -729,14 +847,9 @@ class HierarchyD3 {
             return;
         }
 
-        const hoveredStateName = this.getStateLabel(hoveredItem.state);
         const hoveredCommunitySelection = this.communityLayer.selectAll('.communityNode')
             .filter((node)=>node.data.itemData.index === hoveredIndex)
         ;
-        const hoveredStateSelection = this.stateLayer.selectAll('.stateNode')
-            .filter((node)=>node.data.name === hoveredStateName)
-        ;
-
         hoveredCommunitySelection
             .raise()
             .style('opacity', 1)
@@ -745,17 +858,9 @@ class HierarchyD3 {
             return;
         }
         hoveredCommunitySelection.select('.communityShape')
-            .attr('stroke', '#2563eb')
-            .attr('stroke-width', 1.6)
-        ;
-
-        if(this.selectedStateSet.has(hoveredStateName)){
-            return;
-        }
-        hoveredStateSelection.select('.stateShape')
-            .attr('stroke', '#2563eb')
-            .attr('stroke-width', 1.8)
-            .attr('stroke-dasharray', '4 2')
+            .attr('stroke', this.hoverStrokeColor)
+            .attr('stroke-width', this.hoverStrokeWidth)
+            .attr('stroke-opacity', 1)
         ;
     }
 
@@ -771,21 +876,20 @@ class HierarchyD3 {
         const stateNodeSelection = this.stateLayer.selectAll('.stateNode')
             .filter((node)=>node.data.name === hoveredStateName)
         ;
-        const communityNodeSelection = this.communityLayer.selectAll('.communityNode')
-            .filter((node)=>node.parent && node.parent.data && node.parent.data.name === hoveredStateName)
+        const stateLabelSelection = this.labelLayer.selectAll('.stateLabel')
+            .filter((node)=>node.data.name === hoveredStateName)
         ;
 
         stateNodeSelection.select('.stateShape')
-            .attr('stroke', '#2563eb')
-            .attr('stroke-width', 1.8)
-            .attr('stroke-dasharray', '4 2')
+            .attr('stroke', this.hoverStrokeColor)
+            .attr('stroke-width', this.hoverStrokeWidth)
+            .attr('stroke-dasharray', null)
+            .attr('stroke-opacity', 1)
         ;
-        communityNodeSelection
+        stateLabelSelection
             .style('opacity', 1)
-        ;
-        communityNodeSelection.select('.communityShape')
-            .attr('stroke', '#2563eb')
-            .attr('stroke-width', 1.1)
+            .style('font-weight', 700)
+            .attr('fill', this.hoverStrokeColor)
         ;
     }
 

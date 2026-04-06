@@ -34,34 +34,43 @@ class ScatterplotD3 {
     colorLegendHeight = 136;
     colorLegendWidth = 14;
     colorInterpolator = (value)=>{
-        // trim the brightest/darkest ends to keep both low/high values readable but not over-bright
-        const trimmedValue = 0.12 + (0.76 * value);
-        return d3.interpolateViridis(trimmedValue);
+        // low value -> red, high value -> blue
+        const trimmedValue = 0.08 + (0.84 * value);
+        return d3.interpolateRdBu(trimmedValue);
     };
     // add specific class properties used for the vis render/updates
     defaultOpacity=0.5;
     transitionDuration=160;
     transitionEase=d3.easeCubicOut;
     circleRadius = 3;
-    hoveredCircleRadius = 4.2;
-    selectedCircleRadius = 5.6;
+    hoveredCircleRadius = 4.8;
+    // Three-level highlight profile (restored):
+    // selected > related > filtered
+    selectedCircleRadius = 6.2;
+    relatedCircleRadius = 3.9;
     markerStrokeColor = "#f8fafc";
     markerStrokeWidth = 0.9;
-    hoveredStrokeColor = "#2563eb";
-    hoveredStrokeWidth = 1.8;
-    selectedStrokeColor = "#b45309";
-    selectedStrokeWidth = 2.8;
+    hoveredStrokeColor = "#f59e0b";
+    hoveredStrokeWidth = 2.2;
+    selectedStrokeColor = "#0f172a";
+    selectedStrokeWidth = 3.2;
+    relatedStrokeColor = "#64748b";
+    relatedStrokeWidth = 1.4;
+    relatedOpacity = 0.6;
+    filteredOpacity = 0.1;
     xScale;
     yScale;
     controllerMethods;
     itemPixelCache = [];
     itemByIndex;
     markerGroupByIndex;
+    markerLevelByIndex;
     selectedIndexSet = new Set();
+    selectedStateSet = new Set();
     lastHoveredIndex = null;
-    lastHoveredState = null;
     lastVisDataRef = null;
     currentColorAttribute = null;
+    attributeDirectionByField = null;
 
 
     constructor(el){
@@ -71,6 +80,7 @@ class ScatterplotD3 {
         this.colorScale = d3.scaleSequential(this.colorInterpolator).clamp(true);
         this.itemByIndex = new Map();
         this.markerGroupByIndex = new Map();
+        this.markerLevelByIndex = new Map();
     };
 
     create = function (config) {
@@ -140,16 +150,16 @@ class ScatterplotD3 {
         ;
         this.colorLegendTitleText = this.colorLegendG.append("text")
             .attr("class","scatterplotColorLegendTitle")
-            .attr("x", this.colorLegendWidth + 34)
-            .attr("y", -8)
-            .attr("text-anchor", "end")
-            .text("Color")
+            .attr("x", 0)
+            .attr("y", -10)
+            .attr("text-anchor", "start")
+            .text("Legend")
         ;
         this.colorLegendNoteText = this.colorLegendG.append("text")
             .attr("class","scatterplotColorLegendNote")
-            .attr("x", this.colorLegendWidth + 34)
+            .attr("x", 0)
             .attr("y", this.colorLegendHeight + 14)
-            .attr("text-anchor", "end")
+            .attr("text-anchor", "start")
             .text("")
         ;
         const defs = this.rootSvg.append("defs");
@@ -201,8 +211,8 @@ class ScatterplotD3 {
         this.itemByIndex.clear();
         visData.forEach((item)=>{
             this.itemByIndex.set(item.index, item);
-            const xValue = Number(item[xAttribute]);
-            const yValue = Number(item[yAttribute]);
+            const xValue = this.getRawNumericValue(item, xAttribute);
+            const yValue = this.getRawNumericValue(item, yAttribute);
             if(!Number.isFinite(xValue) || !Number.isFinite(yValue)){
                 return;
             }
@@ -224,7 +234,30 @@ class ScatterplotD3 {
             ? `${(populationIndex * 100).toFixed(1)}% of dataset max`
             : "n/a"
         ;
-        return `State: ${getStateNameWithCodeFromFips(itemData.state)}\nCommunity: ${itemData.communityname}\nViolentCrimesPerPop: ${safeNumber(itemData.ViolentCrimesPerPop)}\nPopulation index: ${safeNumber(itemData.population)} (${populationPercent})`;
+        const tooltipLines = [
+            `State: ${getStateNameWithCodeFromFips(itemData.state)}`,
+            `Community: ${itemData.communityname}`,
+            `ViolentCrimesPerPop: ${safeNumber(itemData.ViolentCrimesPerPop)}`,
+            `Population index: ${safeNumber(itemData.population)} (${populationPercent})`
+        ];
+        const livabilityScore = Number(itemData.livabilityScore);
+        if(Number.isFinite(livabilityScore)){
+            tooltipLines.push(`LivabilityScore: ${safeNumber(livabilityScore)}`);
+        }
+        return tooltipLines.join("\n");
+    }
+
+    getRawNumericValue(itemData, attributeName){
+        const rawValue = Number(itemData[attributeName]);
+        return rawValue;
+    }
+
+    isLowerBetterAttribute(attributeName){
+        const direction = this.attributeDirectionByField
+            ? this.attributeDirectionByField[attributeName]
+            : null
+        ;
+        return direction === 'lower';
     }
 
     updateMarkers(selection,xAttribute,yAttribute,colorAttribute, updateColor=true){
@@ -233,8 +266,8 @@ class ScatterplotD3 {
             .transition().duration(this.transitionDuration).ease(this.transitionEase)
             .attr("transform", (item)=>{
                 // use scales to return shape position from data values
-                const xValue = Number(item[xAttribute]);
-                const yValue = Number(item[yAttribute]);
+                const xValue = this.getRawNumericValue(item, xAttribute);
+                const yValue = this.getRawNumericValue(item, yAttribute);
 
                 // put non-numeric values outside the chart area
                 if(!Number.isFinite(xValue) || !Number.isFinite(yValue)){
@@ -259,38 +292,13 @@ class ScatterplotD3 {
         }
     }
 
-    highlightSelectedIndexes(selectedIndexes){
-        const selectedIndexSet = new Set(
-            (selectedIndexes || [])
-                .filter((index)=>index!==undefined && index!==null)
-        );
-
-        for(const prevIndex of this.selectedIndexSet){
-            if(selectedIndexSet.has(prevIndex)){
-                continue;
-            }
-            const markerNode = this.markerGroupByIndex.get(prevIndex);
-            if(!markerNode){
-                continue;
-            }
-            const markerSelection = d3.select(markerNode);
-            markerSelection.style("opacity", this.defaultOpacity);
-            markerSelection.select(".markerCircle")
-                .attr("r", this.circleRadius)
-                .attr("stroke", this.markerStrokeColor)
-                .attr("stroke-width", this.markerStrokeWidth)
-            ;
+    applyMarkerLevelStyle(index, level){
+        const markerNode = this.markerGroupByIndex.get(index);
+        if(!markerNode){
+            return;
         }
-
-        for(const nextIndex of selectedIndexSet){
-            if(this.selectedIndexSet.has(nextIndex)){
-                continue;
-            }
-            const markerNode = this.markerGroupByIndex.get(nextIndex);
-            if(!markerNode){
-                continue;
-            }
-            const markerSelection = d3.select(markerNode);
+        const markerSelection = d3.select(markerNode);
+        if(level === "selected"){
             markerSelection
                 .raise()
                 .style("opacity", 1)
@@ -300,9 +308,75 @@ class ScatterplotD3 {
                 .attr("stroke", this.selectedStrokeColor)
                 .attr("stroke-width", this.selectedStrokeWidth)
             ;
+            return;
+        }
+        if(level === "related"){
+            markerSelection.style("opacity", this.relatedOpacity);
+            markerSelection.select(".markerCircle")
+                .attr("r", this.relatedCircleRadius)
+                .attr("stroke", this.relatedStrokeColor)
+                .attr("stroke-width", this.relatedStrokeWidth)
+            ;
+            return;
+        }
+        if(level === "filtered"){
+            markerSelection.style("opacity", this.filteredOpacity);
+            markerSelection.select(".markerCircle")
+                .attr("r", this.circleRadius)
+                .attr("stroke", this.markerStrokeColor)
+                .attr("stroke-width", this.markerStrokeWidth)
+            ;
+            return;
+        }
+
+        markerSelection.style("opacity", this.defaultOpacity);
+        markerSelection.select(".markerCircle")
+            .attr("r", this.circleRadius)
+            .attr("stroke", this.markerStrokeColor)
+            .attr("stroke-width", this.markerStrokeWidth)
+        ;
+    }
+
+    getMarkerLevelForSelection(index, selectedIndexSet, selectedStateSet, hasSelection){
+        if(!hasSelection){
+            return "default";
+        }
+        if(selectedIndexSet.has(index)){
+            return "selected";
+        }
+        const itemData = this.itemByIndex.get(index);
+        if(itemData && selectedStateSet.has(String(itemData.state))){
+            return "related";
+        }
+        return "filtered";
+    }
+
+    highlightSelectedIndexes(selectedIndexes){
+        const selectedIndexSet = new Set(
+            (selectedIndexes || [])
+                .filter((index)=>index!==undefined && index!==null)
+        );
+        const selectedStateSet = new Set();
+        for(const index of selectedIndexSet){
+            const itemData = this.itemByIndex.get(index);
+            if(itemData && itemData.state !== undefined && itemData.state !== null){
+                selectedStateSet.add(String(itemData.state));
+            }
+        }
+        const hasSelection = selectedIndexSet.size > 0;
+
+        for(const [index] of this.markerGroupByIndex.entries()){
+            const nextLevel = this.getMarkerLevelForSelection(index, selectedIndexSet, selectedStateSet, hasSelection);
+            const previousLevel = this.markerLevelByIndex.get(index);
+            if(previousLevel === nextLevel){
+                continue;
+            }
+            this.applyMarkerLevelStyle(index, nextLevel);
+            this.markerLevelByIndex.set(index, nextLevel);
         }
 
         this.selectedIndexSet = selectedIndexSet;
+        this.selectedStateSet = selectedStateSet;
     }
 
     highlightSelectedItems(selectedItems){
@@ -317,18 +391,8 @@ class ScatterplotD3 {
         if(index === null || index === undefined){
             return;
         }
-        const markerNode = this.markerGroupByIndex.get(index);
-        if(!markerNode){
-            return;
-        }
-        const isSelected = this.selectedIndexSet.has(index);
-        const markerSelection = d3.select(markerNode);
-        markerSelection.style("opacity", isSelected ? 1 : this.defaultOpacity);
-        markerSelection.select(".markerCircle")
-            .attr("r", isSelected ? this.selectedCircleRadius : this.circleRadius)
-            .attr("stroke", isSelected ? this.selectedStrokeColor : this.markerStrokeColor)
-            .attr("stroke-width", isSelected ? this.selectedStrokeWidth : this.markerStrokeWidth)
-        ;
+        const markerLevel = this.markerLevelByIndex.get(index) || "default";
+        this.applyMarkerLevelStyle(index, markerLevel);
     }
 
     highlightHoveredItem(hoveredItem){
@@ -368,46 +432,37 @@ class ScatterplotD3 {
     }
 
     highlightHoveredState(hoveredState){
-        const nextHoveredState = hoveredState === null || hoveredState === undefined || hoveredState === ""
-            ? null
-            : hoveredState
-        ;
-        if(this.lastHoveredState !== null && String(this.lastHoveredState) !== String(nextHoveredState)){
-            const previousStateSelection = this.svg.selectAll(".markerG")
-                .filter((item)=>String(item.state) === String(this.lastHoveredState))
-            ;
-            previousStateSelection.each((itemData)=>{
-                if(!itemData || itemData.index === undefined || itemData.index === null){
-                    return;
-                }
-                if(this.lastHoveredIndex !== null && String(itemData.index) === String(this.lastHoveredIndex)){
-                    return;
-                }
-                this.resetMarkerToBaseStyle(itemData.index);
-            });
-            this.lastHoveredState = null;
-        }
-        if(nextHoveredState === null){
-            return;
-        }
-        const hoveredStateSelection = this.svg.selectAll(".markerG")
-            .filter((item)=>String(item.state) === String(nextHoveredState))
-            .filter((item)=>!this.selectedIndexSet.has(item.index))
-        ;
-        hoveredStateSelection
-            .style("opacity", 1)
-        ;
-        hoveredStateSelection.select(".markerCircle")
-            .attr("stroke", this.hoveredStrokeColor)
-            .attr("stroke-width", Math.min(this.hoveredStrokeWidth, 1.4))
-        ;
-        this.lastHoveredState = nextHoveredState;
+        // State hover highlight is intentionally disabled in scatterplot:
+        // only the directly hovered point should be emphasized.
+        void hoveredState;
     }
 
     updateChartTexts(meta){
         if(!meta){
             return;
         }
+        const setMultilineSvgText = (textSelection, textValue, lineHeight = 12)=>{
+            if(!textSelection){
+                return;
+            }
+            const x = Number(textSelection.attr("x")) || 0;
+            const lines = String(textValue || "")
+                .split("\n")
+                .map((line)=>line.trim())
+                .filter((line)=>line.length > 0)
+            ;
+            textSelection.text(null);
+            if(lines.length === 0){
+                return;
+            }
+            lines.forEach((line, index)=>{
+                textSelection.append("tspan")
+                    .attr("x", x)
+                    .attr("dy", index === 0 ? 0 : lineHeight)
+                    .text(line)
+                ;
+            });
+        };
         const withUnit = (label, unit)=>{
             if(!unit){
                 return label;
@@ -427,10 +482,10 @@ class ScatterplotD3 {
             this.yAxisLabelText.text(withUnit(meta.yLabel || "Y Axis", meta.yUnit));
         }
         if(this.colorLegendTitleText){
-            this.colorLegendTitleText.text(`Color: ${meta.colorLabel || "attribute"}`);
+            this.colorLegendTitleText.text(meta.colorLabel || "attribute");
         }
         if(this.colorLegendNoteText){
-            this.colorLegendNoteText.text(meta.colorUnit || "");
+            setMultilineSvgText(this.colorLegendNoteText, meta.colorUnit || "", 12);
         }
     }
 
@@ -441,6 +496,8 @@ class ScatterplotD3 {
         ;
         let minValue = colorValues.length > 0 ? d3.min(colorValues) : 0;
         let maxValue = colorValues.length > 0 ? d3.max(colorValues) : 1;
+        const isLivabilityColor = String(colorAttribute) === 'livabilityScore';
+
         if(minValue === maxValue){
             minValue = minValue - 0.01;
             maxValue = maxValue + 0.01;
@@ -451,9 +508,11 @@ class ScatterplotD3 {
             .domain([minValue, maxValue])
             .range([this.colorLegendHeight, 0])
         ;
-        const tickFormatter = minValue>=0 && maxValue<=1.00001
-            ? d3.format(".0%")
-            : d3.format(".2~g")
+        const tickFormatter = isLivabilityColor
+            ? d3.format(".2f")
+            : (minValue>=0 && maxValue<=1.00001
+                ? d3.format(".0%")
+                : d3.format(".2~g"))
         ;
         this.colorLegendAxisG
             .call(d3.axisRight(colorLegendScale).ticks(5).tickFormat(tickFormatter))
@@ -461,20 +520,36 @@ class ScatterplotD3 {
     }
 
     updateAxis = function(visData,xAttribute,yAttribute){
+        const xAxisReversed = this.isLowerBetterAttribute(xAttribute);
+        const yAxisReversed = this.isLowerBetterAttribute(yAttribute);
+        this.xScale.range(xAxisReversed ? [this.width, 0] : [0, this.width]);
+        this.yScale.range(yAxisReversed ? [0, this.height] : [this.height, 0]);
+
         // compute min max using d3.min/max(visData.map(item=>item.attribute))
         const xValues = visData
-            .map((item)=>Number(item[xAttribute]))
+            .map((item)=>this.getRawNumericValue(item, xAttribute))
             .filter((value)=>Number.isFinite(value))
         ;
         const yValues = visData
-            .map((item)=>Number(item[yAttribute]))
+            .map((item)=>this.getRawNumericValue(item, yAttribute))
             .filter((value)=>Number.isFinite(value))
         ;
 
-        const xMin = xValues.length>0 ? d3.min(xValues) : 0;
-        const xMax = xValues.length>0 ? d3.max(xValues) : 1;
-        const yMin = yValues.length>0 ? d3.min(yValues) : 0;
-        const yMax = yValues.length>0 ? d3.max(yValues) : 1;
+        let xMin = xValues.length>0 ? d3.min(xValues) : 0;
+        let xMax = xValues.length>0 ? d3.max(xValues) : 1;
+        let yMin = yValues.length>0 ? d3.min(yValues) : 0;
+        let yMax = yValues.length>0 ? d3.max(yValues) : 1;
+
+        // For normalized metrics, keep axis domain fixed to [0,1]
+        // so the top tick "1" is always visible and comparable.
+        if(xMin >= 0 && xMax <= 1.00001){
+            xMin = 0;
+            xMax = 1;
+        }
+        if(yMin >= 0 && yMax <= 1.00001){
+            yMin = 0;
+            yMax = 1;
+        }
 
         this.xScale.domain([xMin, xMax]);
         this.yScale.domain([yMin, yMax]);
@@ -630,8 +705,17 @@ class ScatterplotD3 {
         ;
     }
 
-    renderScatterplot = function (visData, xAttribute, yAttribute, colorAttribute, meta, controllerMethods){
+    renderScatterplot = function (
+        visData,
+        xAttribute,
+        yAttribute,
+        colorAttribute,
+        meta,
+        controllerMethods,
+        attributeDirectionByField = null
+    ){
         this.controllerMethods = controllerMethods;
+        this.attributeDirectionByField = attributeDirectionByField || null;
         const dataChanged = this.lastVisDataRef !== visData;
         const colorChanged = this.currentColorAttribute !== colorAttribute;
         const needsColorUpdate = dataChanged || colorChanged;
@@ -718,11 +802,13 @@ class ScatterplotD3 {
         this.itemPixelCache = [];
         this.itemByIndex.clear();
         this.markerGroupByIndex.clear();
+        this.markerLevelByIndex.clear();
         this.selectedIndexSet.clear();
+        this.selectedStateSet.clear();
         this.lastHoveredIndex = null;
-        this.lastHoveredState = null;
         this.lastVisDataRef = null;
         this.currentColorAttribute = null;
+        this.attributeDirectionByField = null;
         d3.select(this.el).selectAll("*").remove();
     }
 }

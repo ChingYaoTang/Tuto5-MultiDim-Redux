@@ -18,7 +18,15 @@
     align-items: center;
     gap: 8px;
     padding: 5px 4px 3px 4px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+
+.scatterplotToolbarGroup{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .scatterplotToolbarLabel{
@@ -34,6 +42,8 @@
     background: #f9fafb;
     color: #1f2937;
     padding: 5px 10px;
+    width: 100%;
+    min-width: 0;
 }
 
 .scatterplotHoverTooltip{

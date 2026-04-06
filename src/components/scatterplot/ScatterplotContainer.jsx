@@ -3,37 +3,56 @@ import { useEffect, useRef, useState } from 'react';
 import {useDispatch, useSelector} from 'react-redux'
 
 import ScatterplotD3 from './Scatterplot-d3';
+import { LIVABILITY_DIMENSIONS } from '../../livability/livabilityConfig';
 import { setHoveredItem, setHoveredState, setSelectedItems } from '../../redux/ItemInteractionSlice';
-import { getStateLabelFromFips } from '../../utils/usStateFips';
+import { getFriendlyAttributeLabel } from '../../utils/attributeLabels';
 
-function ScatterplotContainer({xAttributeName, yAttributeName, colorAttributeName, title, xAttributeOptions=[]}){
-    const visData = useSelector(state =>state.dataSet)
+const ATTRIBUTE_DIRECTION_BY_FIELD = LIVABILITY_DIMENSIONS.reduce((accumulator, dimension)=>{
+    accumulator[dimension.scoreField] = 'higher';
+    dimension.features.forEach((feature)=>{
+        accumulator[feature.field] = feature.direction;
+    });
+    return accumulator;
+}, {});
+
+function ScatterplotContainer({
+    xAttributeName,
+    yAttributeName,
+    colorAttributeName,
+    title,
+    xAttributeOptions=[],
+    yAttributeOptions=[],
+    visDataOverride
+}){
+    const dataSetFromStore = useSelector(state =>state.dataSet)
+    const visData = visDataOverride || dataSetFromStore;
     const selectedItems = useSelector(state =>state.itemInteraction.selectedItems)
     const hoveredItem = useSelector(state =>state.itemInteraction.hoveredItem)
-    const hoveredState = useSelector(state =>state.itemInteraction.hoveredState)
     const dispatch = useDispatch();
     const [selectedXAttribute, setSelectedXAttribute] = useState(xAttributeName);
+    const [selectedYAttribute, setSelectedYAttribute] = useState(yAttributeName);
 
     const chartDivContainerRef=useRef(null);
     const scatterplotD3Ref = useRef(null)
     const selectedItemsRef = useRef(selectedItems);
 
-    const formatAttributeLabel = function(attributeName){
-        return attributeName
-            .replace(/([a-z])([A-Z])/g, '$1 $2')
-            .replace(/^./, (char)=>char.toUpperCase())
-        ;
-    }
+    const isLivabilityColor = String(colorAttributeName) === 'livabilityScore';
+    const colorLabelText = getFriendlyAttributeLabel(colorAttributeName);
+    const colorUnitText = isLivabilityColor
+        ? '0 = low livability\n1 = high livability'
+        : 'normalized [0-1]'
+    ;
+    const getDirectionalLabel = (attributeName)=>getFriendlyAttributeLabel(attributeName);
 
     const chartMeta = {
         title: title || "Scatterplot",
-        subtitle: `${formatAttributeLabel(selectedXAttribute)} vs ${formatAttributeLabel(yAttributeName)} (Color: population index)`,
-        xLabel: formatAttributeLabel(selectedXAttribute),
-        yLabel: formatAttributeLabel(yAttributeName),
-        colorLabel: "Population index (relative)",
+        subtitle: `${getDirectionalLabel(selectedXAttribute)} vs ${getDirectionalLabel(selectedYAttribute)} (Color: ${colorLabelText})`,
+        xLabel: getDirectionalLabel(selectedXAttribute),
+        yLabel: getDirectionalLabel(selectedYAttribute),
+        colorLabel: colorLabelText,
         xUnit: "normalized [0-1]",
         yUnit: "normalized [0-1]",
-        colorUnit: "100% = largest community"
+        colorUnit: colorUnitText
     };
 
     const getChartSize = function(){
@@ -69,7 +88,6 @@ function ScatterplotContainer({xAttributeName, yAttributeName, colorAttributeNam
             return;
         }
         scatterplotD3.highlightSelectedItems(selectedItems);
-        scatterplotD3.highlightHoveredState(hoveredState);
         scatterplotD3.highlightHoveredItem(hoveredItem);
     }
 
@@ -109,21 +127,26 @@ function ScatterplotContainer({xAttributeName, yAttributeName, colorAttributeNam
         scatterplotD3.renderScatterplot(
             visData,
             selectedXAttribute,
-            yAttributeName,
+            selectedYAttribute,
             colorAttributeName,
             chartMeta,
-            controllerMethods
+            controllerMethods,
+            ATTRIBUTE_DIRECTION_BY_FIELD
         );
         applyHighlights();
     }
 
     useEffect(()=>{
         renderScatterplot();
-    },[visData, selectedXAttribute, yAttributeName, colorAttributeName]);
+    },[visData, selectedXAttribute, selectedYAttribute, colorAttributeName]);
 
     useEffect(()=>{
         setSelectedXAttribute(xAttributeName);
     },[xAttributeName]);
+
+    useEffect(()=>{
+        setSelectedYAttribute(yAttributeName);
+    },[yAttributeName]);
 
     useEffect(()=>{
         selectedItemsRef.current = selectedItems;
@@ -131,37 +154,47 @@ function ScatterplotContainer({xAttributeName, yAttributeName, colorAttributeNam
 
     useEffect(()=>{
         applyHighlights();
-    },[selectedItems, hoveredItem, hoveredState]);
+    },[selectedItems, hoveredItem]);
 
     const effectiveXOptions = xAttributeOptions.length>0 ? xAttributeOptions : [xAttributeName];
-    const hoverSummaryText = hoveredItem && hoveredItem.index !== undefined && hoveredItem.index !== null
-        ? `Hover: ${getStateLabelFromFips(hoveredItem.state)} / ${hoveredItem.communityname}`
-        : (hoveredState !== null && hoveredState !== undefined
-            ? `Hover state: ${getStateLabelFromFips(hoveredState)}`
-            : "Hover a scatter point or hierarchy node to inspect details")
-    ;
-
+    const effectiveYOptions = yAttributeOptions.length>0 ? yAttributeOptions : [yAttributeName];
     return(
         <div className="scatterplotPanel col">
             <div className="scatterplotToolbar">
-                <label htmlFor="scatter-x-attribute-select" className="scatterplotToolbarLabel">
-                    X Feature:
-                </label>
-                <select
-                    id="scatter-x-attribute-select"
-                    className="scatterplotToolbarSelect"
-                    value={selectedXAttribute}
-                    onChange={(event)=>setSelectedXAttribute(event.target.value)}
-                >
-                    {effectiveXOptions.map((attributeName)=>(
-                        <option key={attributeName} value={attributeName}>
-                            {formatAttributeLabel(attributeName)}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div className="scatterplotHoverTooltip">
-                {hoverSummaryText}
+                <div className="scatterplotToolbarGroup">
+                    <label htmlFor="scatter-x-attribute-select" className="scatterplotToolbarLabel">
+                        X Feat.:
+                    </label>
+                    <select
+                        id="scatter-x-attribute-select"
+                        className="scatterplotToolbarSelect"
+                        value={selectedXAttribute}
+                        onChange={(event)=>setSelectedXAttribute(event.target.value)}
+                    >
+                        {effectiveXOptions.map((attributeName)=>(
+                            <option key={attributeName} value={attributeName}>
+                                {getFriendlyAttributeLabel(attributeName)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="scatterplotToolbarGroup">
+                    <label htmlFor="scatter-y-attribute-select" className="scatterplotToolbarLabel">
+                        Y Feat.:
+                    </label>
+                    <select
+                        id="scatter-y-attribute-select"
+                        className="scatterplotToolbarSelect"
+                        value={selectedYAttribute}
+                        onChange={(event)=>setSelectedYAttribute(event.target.value)}
+                    >
+                        {effectiveYOptions.map((attributeName)=>(
+                            <option key={attributeName} value={attributeName}>
+                                {getFriendlyAttributeLabel(attributeName)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
             <div ref={chartDivContainerRef} className="scatterplotDivContainer">
 
